@@ -498,6 +498,7 @@ void SVM::calibrate_regression_confidence(const std::vector<std::vector<double>>
     }
     regression_residual_variance_ = sq / static_cast<double>(X.size());
     mean_std /= static_cast<double>(X.size());
+    (void)covered; // computed for future diagnostic use; not stored yet
     const double empirical_std = std::sqrt(std::max(0.0, regression_residual_variance_));
     regression_confidence_scale_ = empirical_std / std::max(1e-6, mean_std);
     if (!(regression_confidence_scale_ > 0.0) || !std::isfinite(regression_confidence_scale_)) regression_confidence_scale_ = 1.0;

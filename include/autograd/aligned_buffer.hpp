@@ -71,6 +71,8 @@ public:
         return storage_->to_std_vector();
     }
 
+    double* begin() noexcept { return data(); }
+    double* end() noexcept { return data() ? data() + size() : nullptr; }
     const double* begin() const noexcept { return data(); }
     const double* end() const noexcept { return data() ? data() + size() : nullptr; }
 

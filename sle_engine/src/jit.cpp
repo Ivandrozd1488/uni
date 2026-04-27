@@ -6,9 +6,28 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
-#include <sys/mman.h>
 #include <utility>
 #include <vector>
+
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <sys/mman.h>
+#endif
+
+// Cross-platform I-cache flush after writing JIT code.
+// On x86/x64 the CPU snoops the D-cache so __builtin___clear_cache is a no-op,
+// but it is still required by the ABI on ARM. MSVC has no equivalent builtin;
+// FlushInstructionCache is the Windows API equivalent.
+#if defined(_WIN32)
+#  define UML_FLUSH_ICACHE(begin, end) \
+       ::FlushInstructionCache(::GetCurrentProcess(), (begin), \
+                               static_cast<SIZE_T>(reinterpret_cast<const char*>(end) - \
+                                                   reinterpret_cast<const char*>(begin)))
+#else
+#  define UML_FLUSH_ICACHE(begin, end) \
+       __builtin___clear_cache(reinterpret_cast<char*>(begin), reinterpret_cast<char*>(end))
+#endif
 
 namespace sle {
 namespace {
@@ -417,8 +436,13 @@ bool runtime_supports_instruction_set(TargetInstructionSet isa) noexcept {
 
 ExecutableBuffer::ExecutableBuffer(std::size_t size) : size_(size) {
     if (size == 0) return;
+#if defined(_WIN32)
+    void* ptr = ::VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (ptr == nullptr) throw std::runtime_error("VirtualAlloc executable buffer failed");
+#else
     void* ptr = ::mmap(nullptr, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) throw std::runtime_error("mmap executable buffer failed");
+#endif
     data_ = static_cast<std::uint8_t*>(ptr);
 }
 
@@ -442,7 +466,11 @@ ExecutableBuffer::~ExecutableBuffer() { release(); }
 
 void ExecutableBuffer::release() noexcept {
     if (data_ != nullptr) {
+#if defined(_WIN32)
+        ::VirtualFree(data_, 0, MEM_RELEASE);
+#else
         ::munmap(data_, size_);
+#endif
         data_ = nullptr;
         size_ = 0;
     }
@@ -495,8 +523,7 @@ std::shared_ptr<CompiledBooleanCascade> rehydrate_compiled_boolean_cascade(
     auto compiled = std::make_shared<CompiledBooleanCascade>();
     compiled->buffer_ = ExecutableBuffer(code_bytes.size());
     std::memcpy(compiled->buffer_.data(), code_bytes.data(), code_bytes.size());
-    __builtin___clear_cache(reinterpret_cast<char*>(compiled->buffer_.data()),
-                            reinterpret_cast<char*>(compiled->buffer_.data() + compiled->buffer_.size()));
+    UML_FLUSH_ICACHE(compiled->buffer_.data(), compiled->buffer_.data() + compiled->buffer_.size());
 #if defined(__x86_64__) || defined(__i386__)
     asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
 #endif
@@ -533,8 +560,7 @@ void CompiledBooleanCascade::patch_gate_mask(std::size_t gate_index, std::uint8_
     if (it == patch_points_.end()) throw std::invalid_argument("gate has no patch point in current backend");
     buffer_.data()[it->immediate_offset] = new_mask;
     if (synchronize) {
-        __builtin___clear_cache(reinterpret_cast<char*>(buffer_.data()),
-                                reinterpret_cast<char*>(buffer_.data() + buffer_.size()));
+        UML_FLUSH_ICACHE(buffer_.data(), buffer_.data() + buffer_.size());
 #if defined(__x86_64__) || defined(__i386__)
         asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
 #endif
@@ -549,8 +575,7 @@ void CompiledBooleanCascade::patch_all_masks(const BooleanCascade& cascade, bool
         patch_gate_mask(gate_index, cascade.gates()[gate_index].mask, false);
     }
     if (synchronize) {
-        __builtin___clear_cache(reinterpret_cast<char*>(buffer_.data()),
-                                reinterpret_cast<char*>(buffer_.data() + buffer_.size()));
+        UML_FLUSH_ICACHE(buffer_.data(), buffer_.data() + buffer_.size());
 #if defined(__x86_64__) || defined(__i386__)
         asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
 #endif

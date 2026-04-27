@@ -4,8 +4,12 @@
 #include <array>
 #include <bit>
 #include <cstring>
-#include <immintrin.h>
 #include <stdexcept>
+
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#  include <immintrin.h>
+#  define UML_TRAINER_X86 1
+#endif
 
 namespace sle {
 namespace {
@@ -71,12 +75,15 @@ std::vector<double> score_gates(const BooleanCascade& cascade, const BitVector& 
 void synchronize_patch_site(CompiledBooleanCascade& compiled, std::size_t gate_index) {
     if (compiled.patch_points().empty()) return;
     const auto offset = compiled.patch_points()[gate_index].immediate_offset;
+#if defined(UML_TRAINER_X86)
     _mm_clflush(compiled.raw_code() + offset);
     _mm_mfence();
+    asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
+#else
+    // On non-x86 (e.g. ARM/Apple Silicon) use the compiler built-in to flush
+    // the I-cache for the patched byte. _mm_clflush is x86-only.
     __builtin___clear_cache(reinterpret_cast<char*>(compiled.raw_code() + offset),
                             reinterpret_cast<char*>(compiled.raw_code() + offset + 1U));
-#if defined(__x86_64__) || defined(__i386__)
-    asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
 #endif
 }
 
