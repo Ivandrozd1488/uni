@@ -1,0 +1,7 @@
+{
+  "matmul 256x256": { "max_min_ms": 40.0 },
+  "matmul 64x64": { "max_min_ms": 2.0 },
+  "PINN fast train_step (100 coll, 2 BC)": { "max_min_ms": 3.0 },
+  "PINN fast predict (1000 points)": { "max_min_ms": 6.0 },
+  "AlignedVec dot (1M doubles)": { "max_min_ms": 3.0 }
+}

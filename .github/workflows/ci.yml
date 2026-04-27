@@ -1,0 +1,427 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux / ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Release, Debug]
+    env:
+      CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build libgomp1
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang libomp-dev
+          fi
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=ON \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_AVX=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF \
+            -DUNIFIED_ML_INSTALL=ON \
+            -DUNIFIED_ML_VERSIONED_INSTALL=OFF \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Performance gate (Release GCC only)
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Release'
+        run: |
+          cmake -S . -B build_perf -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUNIFIED_ML_BUILD_TESTS=OFF \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=ON \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_AVX=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF
+          cmake --build build_perf --parallel --target benchmark
+          OMP_NUM_THREADS=2 ./build_perf/benchmark > benchmark_output.txt
+          python3 tools/perf_gate.py benchmark_output.txt tools/perf_baseline.json
+
+      - name: Install
+        run: cmake --install build
+
+      - name: Verify installed files
+        run: |
+          test -f ${{ github.workspace }}/install/include/unified_ml || (echo "MISSING: include/unified_ml" && exit 1)
+          test -f ${{ github.workspace }}/install/include/unified_ml_stable.hpp || (echo "MISSING: include/unified_ml_stable.hpp" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/libunified_ml.so || test -f ${{ github.workspace }}/install/lib/libunified_ml.a || (echo "MISSING: libunified_ml.{so,a}" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/cmake/unified_ml/unified_mlConfig.cmake || (echo "MISSING: unified_mlConfig.cmake" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/cmake/unified_ml/unified_mlTargets.cmake || (echo "MISSING: unified_mlTargets.cmake" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/pkgconfig/unified_ml.pc || (echo "MISSING: unified_ml.pc" && exit 1)
+
+      - name: Smoke test — find_package
+        run: |
+          cmake -S examples/install_test -B build_smoke -G Ninja \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/install
+          cmake --build build_smoke --parallel
+          ./build_smoke/install_test
+
+      - name: Smoke test — pkg-config
+        if: matrix.build_type == 'Release'
+        run: |
+          export PKG_CONFIG_PATH="${{ github.workspace }}/install/lib/pkgconfig:$PKG_CONFIG_PATH"
+          ${{ env.CXX }} examples/install_test/main.cpp \
+            $(pkg-config --cflags --libs unified_ml) \
+            -o pkg_test
+          export LD_LIBRARY_PATH="${{ github.workspace }}/install/lib:$LD_LIBRARY_PATH"
+          ./pkg_test
+
+  macos:
+    name: macOS / AppleClang / ${{ matrix.build_type }}
+    runs-on: macos-14
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install cmake ninja libomp
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=ON \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_AVX=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF \
+            -DUNIFIED_ML_INSTALL=ON \
+            -DUNIFIED_ML_VERSIONED_INSTALL=OFF \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
+      - name: Build & Test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Install
+        run: cmake --install build
+      - name: Verify installed files
+        run: |
+          test -f ${{ github.workspace }}/install/include/unified_ml || (echo "MISSING: include/unified_ml" && exit 1)
+          test -f ${{ github.workspace }}/install/include/unified_ml_stable.hpp || (echo "MISSING: include/unified_ml_stable.hpp" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/libunified_ml.dylib || test -f ${{ github.workspace }}/install/lib/libunified_ml.a || (echo "MISSING: libunified_ml.{dylib,a}" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/cmake/unified_ml/unified_mlConfig.cmake || (echo "MISSING: unified_mlConfig.cmake" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/cmake/unified_ml/unified_mlTargets.cmake || (echo "MISSING: unified_mlTargets.cmake" && exit 1)
+          test -f ${{ github.workspace }}/install/lib/pkgconfig/unified_ml.pc || (echo "MISSING: unified_ml.pc" && exit 1)
+      - name: Smoke test — find_package
+        run: |
+          cmake -S examples/install_test -B build_smoke -G Ninja \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/install
+          cmake --build build_smoke --parallel
+          ./build_smoke/install_test
+
+  windows:
+    name: Windows / MSVC / ${{ matrix.build_type }}
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: |
+          cmake -S . -B build `
+            -DUNIFIED_ML_BUILD_TESTS=ON `
+            -DUNIFIED_ML_BUILD_SHARED=ON `
+            -DUNIFIED_ML_BUILD_STATIC=ON `
+            -DUNIFIED_ML_ENABLE_OPENMP=ON `
+            -DUNIFIED_ML_ENABLE_AVX=ON `
+            -DUNIFIED_ML_ENABLE_AVX512=OFF `
+            -DUNIFIED_ML_NATIVE_MARCH=OFF `
+            -DUNIFIED_ML_INSTALL=ON `
+            -DUNIFIED_ML_VERSIONED_INSTALL=OFF `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\install"
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+      - name: Test
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+      - name: Install
+        run: cmake --install build --config ${{ matrix.build_type }}
+      - name: Verify installed files
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${{ github.workspace }}\install\include\unified_ml")) { throw "MISSING: include/unified_ml" }
+          if (!(Test-Path "${{ github.workspace }}\install\include\unified_ml_stable.hpp")) { throw "MISSING: include/unified_ml_stable.hpp" }
+          if (!(Test-Path "${{ github.workspace }}\install\lib\unified_ml.lib") -and !(Test-Path "${{ github.workspace }}\install\bin\unified_ml.dll")) { throw "MISSING: unified_ml import/runtime library" }
+          if (!(Test-Path "${{ github.workspace }}\install\lib\cmake\unified_ml\unified_mlConfig.cmake")) { throw "MISSING: unified_mlConfig.cmake" }
+          if (!(Test-Path "${{ github.workspace }}\install\lib\cmake\unified_ml\unified_mlTargets.cmake")) { throw "MISSING: unified_mlTargets.cmake" }
+          if (!(Test-Path "${{ github.workspace }}\install\lib\pkgconfig\unified_ml.pc")) { throw "MISSING: unified_ml.pc" }
+      - name: Smoke test — find_package
+        run: |
+          cmake -S examples\install_test -B build_smoke `
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}\install"
+          cmake --build build_smoke --config ${{ matrix.build_type }} --parallel
+          $env:PATH = "${{ github.workspace }}\install\bin;$env:PATH"
+          .\build_smoke\${{ matrix.build_type }}\install_test.exe
+
+  fetchcontent:
+    name: FetchContent integration (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y cmake ninja-build
+      - name: Test FetchContent (local source override)
+        run: |
+          cmake -S examples/fetchcontent -B build_fc -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUNIFIED_ML_BUILD_TESTS=OFF \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DFETCHCONTENT_SOURCE_DIR_UNIFIED_ML=${{ github.workspace }}
+          cmake --build build_fc --parallel
+          ./build_fc/my_app
+
+  linux-sanitizers:
+    name: Linux / Clang / Debug / ASan+UBSan
+    runs-on: ubuntu-22.04
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_init_order=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build clang libomp-dev
+      - name: Configure
+        run: |
+          cmake -S . -B build_san -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=OFF \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_WERROR=ON \
+            -DUNIFIED_ML_ENABLE_ASAN=ON \
+            -DUNIFIED_ML_ENABLE_UBSAN=ON \
+            -DUNIFIED_ML_ENABLE_AVX=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF
+      - name: Build
+        run: cmake --build build_san --parallel
+      - name: Unit tests (sanitized)
+        run: ctest --test-dir build_san --output-on-failure
+
+  linux-msan:
+    name: Linux / Clang / Debug / MSan (optional)
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    env:
+      CC: clang
+      CXX: clang++
+      MSAN_OPTIONS: halt_on_error=1:track_origins=2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build clang libomp-dev
+      - name: Configure
+        run: |
+          cmake -S . -B build_msan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=OFF \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_WERROR=ON \
+            -DUNIFIED_ML_ENABLE_MSAN=ON \
+            -DUNIFIED_ML_ENABLE_AVX=OFF \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF
+      - name: Build
+        run: cmake --build build_msan --parallel
+      - name: Unit tests (msan)
+        run: ctest --test-dir build_msan --output-on-failure
+
+
+  linux-sle-reliability:
+    name: Linux / SLE reliability / ${{ matrix.compiler }} / ${{ matrix.sanitizer }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        sanitizer: [none, asan_ubsan]
+    env:
+      CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_init_order=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build libgomp1
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang libomp-dev
+          fi
+      - name: Configure
+        run: |
+          EXTRA_FLAGS=""
+          if [ "${{ matrix.sanitizer }}" = "asan_ubsan" ]; then
+            EXTRA_FLAGS="-DUNIFIED_ML_ENABLE_ASAN=ON -DUNIFIED_ML_ENABLE_UBSAN=ON"
+          fi
+          cmake -S . -B build_sle -G Ninja             -DCMAKE_BUILD_TYPE=Debug             -DUNIFIED_ML_BUILD_TESTS=ON             -DUNIFIED_ML_BUILD_BENCHMARKS=OFF             -DUNIFIED_ML_BUILD_SHARED=ON             -DUNIFIED_ML_BUILD_STATIC=OFF             -DUNIFIED_ML_ENABLE_OPENMP=ON             -DUNIFIED_ML_ENABLE_AVX=OFF             -DUNIFIED_ML_ENABLE_AVX512=OFF             -DUNIFIED_ML_NATIVE_MARCH=OFF             -DUNIFIED_ML_ENABLE_WERROR=ON             ${EXTRA_FLAGS}
+      - name: Build
+        run: cmake --build build_sle --parallel
+      - name: SLE stress + diagnostics test set
+        run: |
+          ctest --test-dir build_sle -R 'test_sle_(distillation_diagnostics|distillation_edge_cases|level2_utility|safe_mode_and_repro)' --output-on-failure
+      - name: Reproducibility gate check
+        run: ctest --test-dir build_sle -R test_sle_safe_mode_and_repro --output-on-failure
+
+  linux-coverage:
+    name: Linux / GCC / Coverage
+    runs-on: ubuntu-22.04
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build gcovr libgomp1
+      - name: Configure
+        run: |
+          cmake -S . -B build_cov -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=OFF \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_WERROR=ON \
+            -DUNIFIED_ML_ENABLE_COVERAGE=ON \
+            -DUNIFIED_ML_ENABLE_AVX=OFF \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF
+      - name: Build
+        run: cmake --build build_cov --parallel
+      - name: Unit tests
+        run: ctest --test-dir build_cov --output-on-failure
+      - name: Generate coverage reports
+        run: |
+          gcovr \
+            --root . \
+            --exclude 'test_.*\\.cpp' \
+            --exclude 'benchmark.*\\.cpp' \
+            --exclude 'examples/.*' \
+            --xml-pretty --output coverage.xml \
+            --html-details --output coverage.html \
+            --print-summary
+      - name: Coverage floor (critical modules)
+        run: |
+          gcovr \
+            --root . \
+            --filter 'src/core/.*' \
+            --filter 'src/models/xgboost/.*' \
+            --exclude 'test_.*\\.cpp' \
+            --exclude 'benchmark.*\\.cpp' \
+            --exclude 'examples/.*' \
+            --fail-under-line 80 \
+            --print-summary
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            coverage.html
+
+  linux-werror:
+    name: Linux / Warning-clean / ${{ matrix.compiler }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build libgomp1
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang libomp-dev
+          fi
+      - name: Configure
+        run: |
+          cmake -S . -B build_werror -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUNIFIED_ML_BUILD_TESTS=ON \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=ON \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_WERROR=ON \
+            -DUNIFIED_ML_ENABLE_AVX=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF
+      - name: Build
+        run: cmake --build build_werror --parallel
+      - name: Unit tests
+        run: ctest --test-dir build_werror --output-on-failure
+
+  all-green:
+    name: All CI passed
+    runs-on: ubuntu-22.04
+    needs: [linux, macos, windows, fetchcontent, linux-sanitizers, linux-sle-reliability, linux-coverage, linux-werror]
+    if: always()
+    steps:
+      - name: Check
+        run: |
+          if [[ "${{ needs.linux.result }}" != "success" || \
+                "${{ needs.macos.result }}" != "success" || \
+                "${{ needs.windows.result }}" != "success" || \
+                "${{ needs.fetchcontent.result }}" != "success" || \
+                "${{ needs.linux-sanitizers.result }}" != "success" || \
+                "${{ needs.linux-sle-reliability.result }}" != "success" || \
+                "${{ needs.linux-coverage.result }}" != "success" || \
+                "${{ needs.linux-werror.result }}" != "success" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+          echo "All jobs passed"

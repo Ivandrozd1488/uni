@@ -1,0 +1,54 @@
+unified_ml-1.0.0-linux-x86_64/    ← extracted release archive
+│
+├  include/
+│ ├  unified_ml         ← extensionless entry point  (#include <unified_ml>)
+│ ├  unified_ml.hpp       ← full umbrella header
+│ ├  unified_ml_version.hpp     ← version macros
+│ ├  core/
+│ │ ├  linalg.hpp
+│ │ ├  activations.hpp
+│ │ ├  optimizers.hpp
+│ │ ├  random.hpp
+│ │ ├  hpc_kernels.hpp
+│ │ └  compat.hpp
+│ ├  autograd/
+│ │ ├  autograd.h
+│ │ ├  tensor.h
+│ │ ├  functional.h
+│ │ └  node.h
+│ └  models/
+│   ├  mlp/    (activation, layer, linear, loss, model, sequential)
+│   ├  rf/     (cart, dataset, metrics, random_forest, split, tree, utils)
+│   ├  xgboost/  (booster/, callback/, core/, data/, explain/,
+│   │      metric/, objective/, predictor/, tree/, utils/)
+│   ├  pinn/   (activations, layers, loss, neural_network, ...)
+│   ├  deep_onet/  (activations, branch_net, layers, loss, model, ...)
+│   ├  dbscan/   (dbscan, point, utils)
+│   ├  iforest/  (isolation_forest, itree, math_utils, node, random_utils)
+│   ├  pca/    (pca)
+│   └  kriging/  (kriging)
+│
+├  lib/
+│ ├  libunified_ml.a      ← static library (Linux/macOS)
+│ │ unified_ml.lib      ← static library (Windows)
+│ │ unified_ml.dll / .so / .dylib ← shared (if built with -DUNIFIED_ML_BUILD_SHARED=ON)
+│ ├  cmake/
+│ │ └  unified_ml/
+│ │   ├  unified_mlConfig.cmake   ← find_package() entry point
+│ │   ├  unified_mlConfigVersion.cmake  ← SameMajorVersion compat check
+│ │   └  unified_mlTargets.cmake    ← imported target unified_ml::unified_ml
+│ └  pkgconfig/
+│   └  unified_ml.pc      ← pkg-config (relocatable)
+│
+├  share/
+│ └  unified_ml/
+│   ├  examples/
+│   │ └  basic_usage/
+│   │   ├  CMakeLists.txt   ← ready to cmake + build
+│   │   └  main.cpp     ← full API smoke test
+│   ├  LICENSE
+│   └  README.md
+│
+└  (optional)
+  ├  bin/           ← runtime DLLs on Windows if shared
+  └  debug/         ← PDB files on MSVC

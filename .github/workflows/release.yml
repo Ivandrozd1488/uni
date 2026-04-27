@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CMAKE_COMMON: >-
+    -DUNIFIED_ML_BUILD_SHARED=ON
+    -DUNIFIED_ML_BUILD_STATIC=ON
+    -DUNIFIED_ML_BUILD_TESTS=OFF
+    -DUNIFIED_ML_BUILD_BENCHMARKS=OFF
+    -DUNIFIED_ML_ENABLE_OPENMP=ON
+    -DUNIFIED_ML_ENABLE_AVX=ON
+    -DUNIFIED_ML_ENABLE_AVX512=OFF
+    -DUNIFIED_ML_NATIVE_MARCH=OFF
+    -DUNIFIED_ML_INSTALL=ON
+    -DUNIFIED_ML_VERSIONED_INSTALL=OFF
+
+jobs:
+  release-hardening:
+    name: Release hardening / ${{ matrix.profile }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [werror-gcc, werror-clang, asan-ubsan, coverage]
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_init_order=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build gcovr libgomp1
+          if [ "${{ matrix.profile }}" = "werror-clang" ] || [ "${{ matrix.profile }}" = "asan-ubsan" ]; then
+            sudo apt-get install -y clang libomp-dev
+          fi
+      - name: Configure
+        run: |
+          export CC=gcc
+          export CXX=g++
+          if [ "${{ matrix.profile }}" = "werror-clang" ] || [ "${{ matrix.profile }}" = "asan-ubsan" ]; then
+            export CC=clang
+            export CXX=clang++
+          fi
+          EXTRA_FLAGS="-DCMAKE_BUILD_TYPE=Release -DUNIFIED_ML_BUILD_TESTS=ON -DUNIFIED_ML_ENABLE_WERROR=ON"
+          if [ "${{ matrix.profile }}" = "asan-ubsan" ]; then
+            EXTRA_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DUNIFIED_ML_BUILD_TESTS=ON -DUNIFIED_ML_ENABLE_WERROR=ON -DUNIFIED_ML_ENABLE_ASAN=ON -DUNIFIED_ML_ENABLE_UBSAN=ON"
+          elif [ "${{ matrix.profile }}" = "coverage" ]; then
+            EXTRA_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DUNIFIED_ML_BUILD_TESTS=ON -DUNIFIED_ML_ENABLE_WERROR=ON -DUNIFIED_ML_ENABLE_COVERAGE=ON -DUNIFIED_ML_ENABLE_AVX=OFF"
+          fi
+          cmake -S . -B build_hardening -G Ninja \
+            -DUNIFIED_ML_BUILD_SHARED=ON \
+            -DUNIFIED_ML_BUILD_STATIC=OFF \
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF \
+            -DUNIFIED_ML_ENABLE_OPENMP=ON \
+            -DUNIFIED_ML_ENABLE_AVX512=OFF \
+            -DUNIFIED_ML_NATIVE_MARCH=OFF \
+            ${EXTRA_FLAGS}
+      - name: Build
+        run: cmake --build build_hardening --parallel
+      - name: Unit tests
+        run: ctest --test-dir build_hardening --output-on-failure
+      - name: Coverage floor (critical modules)
+        if: matrix.profile == 'coverage'
+        run: |
+          gcovr \
+            --root . \
+            --filter 'src/core/.*' \
+            --filter 'src/models/xgboost/.*' \
+            --exclude 'test_.*\\.cpp' \
+            --exclude 'benchmark.*\\.cpp' \
+            --exclude 'examples/.*' \
+            --fail-under-line 80 \
+            --print-summary
+
+  linux-x86_64:
+    name: Linux x86_64 (GCC)
+    runs-on: ubuntu-22.04
+    needs: [release-hardening]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build libgomp1 patchelf
+      - name: Detect version
+        run: echo "VER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/staging" \
+            ${{ env.CMAKE_COMMON }}
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+      - name: Install to staging
+        run: cmake --install build
+      - name: Verify staging contents
+        run: |
+          test -f "$GITHUB_WORKSPACE/staging/include/unified_ml" || (echo "MISSING: include/unified_ml" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/include/unified_ml_stable.hpp" || (echo "MISSING: include/unified_ml_stable.hpp" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/libunified_ml.so" || test -f "$GITHUB_WORKSPACE/staging/lib/libunified_ml.a" || (echo "MISSING: libunified_ml.{so,a}" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/cmake/unified_ml/unified_mlConfig.cmake" || (echo "MISSING: unified_mlConfig.cmake" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/pkgconfig/unified_ml.pc" || (echo "MISSING: unified_ml.pc" && exit 1)
+      - name: Smoke test
+        run: |
+          cmake -S examples/install_test -B bsmoke -G Ninja \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/staging"
+          cmake --build bsmoke --parallel
+          LD_LIBRARY_PATH="$GITHUB_WORKSPACE/staging/lib" ./bsmoke/install_test
+      - name: Package
+        run: |
+          PKG="unified_ml-${VER}-linux-x86_64"
+          mv staging "$PKG"
+          tar czf "${PKG}.tar.gz" "$PKG"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: unified_ml-*.tar.gz*
+          retention-days: 1
+
+  macos-arm64:
+    name: macOS arm64 (AppleClang)
+    runs-on: macos-14
+    needs: [release-hardening]
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install cmake ninja libomp
+      - name: Detect version
+        run: echo "VER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/staging" \
+            ${{ env.CMAKE_COMMON }}
+      - name: Build
+        run: cmake --build build --parallel $(sysctl -n hw.ncpu)
+      - name: Install
+        run: cmake --install build
+      - name: Verify staging contents
+        run: |
+          test -f "$GITHUB_WORKSPACE/staging/include/unified_ml" || (echo "MISSING: include/unified_ml" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/include/unified_ml_stable.hpp" || (echo "MISSING: include/unified_ml_stable.hpp" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/libunified_ml.dylib" || test -f "$GITHUB_WORKSPACE/staging/lib/libunified_ml.a" || (echo "MISSING: libunified_ml.{dylib,a}" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/cmake/unified_ml/unified_mlConfig.cmake" || (echo "MISSING: unified_mlConfig.cmake" && exit 1)
+          test -f "$GITHUB_WORKSPACE/staging/lib/pkgconfig/unified_ml.pc" || (echo "MISSING: unified_ml.pc" && exit 1)
+      - name: Smoke test
+        run: |
+          cmake -S examples/install_test -B bsmoke -G Ninja \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/staging"
+          cmake --build bsmoke --parallel
+          DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/staging/lib" ./bsmoke/install_test
+      - name: Package
+        run: |
+          PKG="unified_ml-${VER}-macos-arm64"
+          mv staging "$PKG"
+          tar czf "${PKG}.tar.gz" "$PKG"
+          shasum -a 256 "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: unified_ml-*.tar.gz*
+          retention-days: 1
+
+  windows-x64:
+    name: Windows x64 (MSVC)
+    runs-on: windows-2022
+    needs: [release-hardening]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect version
+        shell: bash
+        run: echo "VER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+      - name: Configure
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE\staging" `
+            -DUNIFIED_ML_BUILD_SHARED=ON `
+            -DUNIFIED_ML_BUILD_STATIC=ON `
+            -DUNIFIED_ML_BUILD_TESTS=OFF `
+            -DUNIFIED_ML_BUILD_BENCHMARKS=OFF `
+            -DUNIFIED_ML_ENABLE_OPENMP=ON `
+            -DUNIFIED_ML_ENABLE_AVX=ON `
+            -DUNIFIED_ML_NATIVE_MARCH=OFF `
+            -DUNIFIED_ML_INSTALL=ON `
+            -DUNIFIED_ML_VERSIONED_INSTALL=OFF
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Install to staging
+        run: cmake --install build --config Release
+      - name: Verify staging contents
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\staging\include\unified_ml")) { throw "MISSING: include/unified_ml" }
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\staging\include\unified_ml_stable.hpp")) { throw "MISSING: include/unified_ml_stable.hpp" }
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\staging\lib\unified_ml.lib") -and !(Test-Path "$env:GITHUB_WORKSPACE\staging\bin\unified_ml.dll")) { throw "MISSING: unified_ml import/runtime library" }
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\staging\lib\cmake\unified_ml\unified_mlConfig.cmake")) { throw "MISSING: unified_mlConfig.cmake" }
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\staging\lib\pkgconfig\unified_ml.pc")) { throw "MISSING: unified_ml.pc" }
+      - name: Smoke test
+        run: |
+          cmake -S examples\install_test -B bsmoke `
+            -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE\staging"
+          cmake --build bsmoke --config Release --parallel
+          $env:PATH = "$env:GITHUB_WORKSPACE\staging\bin;$env:PATH"
+          .\bsmoke\Release\install_test.exe
+      - name: Package
+        shell: bash
+        run: |
+          PKG="unified_ml-${VER}-windows-x64"
+          mv staging "$PKG"
+          7z a "${PKG}.zip" "$PKG"
+          sha256sum "${PKG}.zip" > "${PKG}.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: unified_ml-*.zip*
+          retention-days: 1

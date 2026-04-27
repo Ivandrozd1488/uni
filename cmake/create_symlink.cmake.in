@@ -1,0 +1,27 @@
+# Post-install: create versioned symlink current -> VERSION    
+# Called via install(SCRIPT ...) from CMakeLists.txt
+# @DESTDIR@ handling: CMake passes DESTDIR as env var on `cmake --install`
+
+set(_prefix  "$ENV{DESTDIR}@CMAKE_INSTALL_PREFIX@")
+set(_version_dir "${_prefix}/unified_ml/@PROJECT_VERSION@")
+set(_symlink   "${_prefix}/unified_ml/current")
+
+# Only create if the versioned dir was actually installed
+if(EXISTS "${_version_dir}")
+  if(IS_SYMLINK "${_symlink}")
+    file(REMOVE "${_symlink}")
+  endif()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    "@PROJECT_VERSION@"
+    "${_symlink}"
+    RESULT_VARIABLE _rc
+  )
+  if(_rc EQUAL 0)
+    message(STATUS "Created symlink: ${_symlink} -> @PROJECT_VERSION@")
+  else()
+    message(WARNING "Could not create symlink ${_symlink} (rc=${_rc})")
+  endif()
+else()
+  message(STATUS "Versioned dir not found, skipping symlink: ${_version_dir}")
+endif()

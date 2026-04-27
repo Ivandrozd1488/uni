@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.17)
+project(unified_ml_conan_test CXX)
+find_package(unified_ml REQUIRED)
+add_executable(test_conan_pkg main.cpp)
+target_link_libraries(test_conan_pkg PRIVATE unified_ml::unified_ml)

@@ -1,0 +1,25 @@
+# unified_ml pkg-config file — v@PROJECT_VERSION@
+# Fully relocatable via ${pcfiledir}: works anywhere the archive is unpacked.
+#
+# Usage:
+# Shared: g++ main.cpp $(pkg-config --cflags --libs unified_ml)
+# Static: g++ main.cpp $(pkg-config --cflags --libs --static unified_ml)
+
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: unified_ml
+Description: @PROJECT_DESCRIPTION@
+Version: @PROJECT_VERSION@
+URL: @CMAKE_PROJECT_HOMEPAGE_URL@
+
+# Shared linking (default)
+Libs: -L${libdir} -lunified_ml
+
+# Static linking: add OpenMP and math explicitly
+# Use with: pkg-config --cflags --libs --static unified_ml
+Libs.private: @OPENMP_PKGCONFIG_LIBS@ -lm
+
+Cflags: -I${includedir} -std=c++17

@@ -1,0 +1,4 @@
+# dataset_family,seed,train_size,test_size,feature_count,noise_rate,profile,compression_profile,latency_optimized
+logic_family,7,48,120,6,0.0,balanced,false,true
+logic_family,19,48,120,6,0.0,balanced,false,true
+logic_family,42,48,120,6,0.0,balanced,false,true

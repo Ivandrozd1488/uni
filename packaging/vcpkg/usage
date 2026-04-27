@@ -1,0 +1,8 @@
+unified-ml provides CMake targets:
+
+  find_package(unified_ml REQUIRED)
+  target_link_libraries(main PRIVATE unified_ml::unified_ml)
+
+Or force a specific linkage:
+  target_link_libraries(main PRIVATE unified_ml::shared)  # shared
+  target_link_libraries(main PRIVATE unified_ml::static)  # static

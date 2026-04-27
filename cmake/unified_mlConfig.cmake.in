@@ -1,0 +1,44 @@
+@PACKAGE_INIT@
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  unified_ml CMake Package Config — v@PROJECT_VERSION@
+#  ABI: SameMajorVersion (@PROJECT_VERSION_MAJOR@.x.x are all compatible)
+#
+#  Usage:
+#  find_package(unified_ml REQUIRED)
+#  target_link_libraries(my_app PRIVATE unified_ml::unified_ml)  # default
+#  target_link_libraries(my_app PRIVATE unified_ml::shared)  # explicit shared
+#  target_link_libraries(my_app PRIVATE unified_ml::static)  # explicit static
+# ══════════════════════════════════════════════════════════════════════════════
+
+include(CMakeFindDependencyMacro)
+
+# OpenMP propagation           
+# If this library was compiled with OpenMP, consumers need it on their link line
+# (for static linking). For shared linking CMake handles it automatically via
+# the imported target's interface.
+set(_uml_with_openmp "@OpenMP_CXX_FOUND@")
+if(_uml_with_openmp)
+  find_dependency(OpenMP QUIET)
+  if(NOT OpenMP_FOUND)
+    message(WARNING
+    "unified_ml was built with OpenMP but OpenMP was not found on this system. "
+    "Parallel operations will be disabled at runtime.")
+  endif()
+endif()
+unset(_uml_with_openmp)
+
+# Exported targets          
+include("${CMAKE_CURRENT_LIST_DIR}/unified_mlTargets.cmake")
+
+# Version info            
+set(unified_ml_VERSION   "@PROJECT_VERSION@")
+set(unified_ml_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(unified_ml_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(unified_ml_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+set(unified_ml_SOVERSION   "@UNIFIED_ML_SOVERSION@")
+set(unified_ml_WITH_OPENMP "@OpenMP_CXX_FOUND@")
+set(unified_ml_HAS_SHARED  "@UNIFIED_ML_BUILD_SHARED@")
+set(unified_ml_HAS_STATIC  "@UNIFIED_ML_BUILD_STATIC@")
+
+check_required_components(unified_ml)

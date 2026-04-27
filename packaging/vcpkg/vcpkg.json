@@ -1,0 +1,17 @@
+{
+  "name": "unified-ml",
+  "version": "1.0.0",
+  "description": "HPC-Grade C++ Machine Learning Engine — 10 models, zero dependencies",
+  "homepage": "https://github.com/your-org/unified_ml",
+  "license": "MIT",
+  "supports": "!uwp & !arm & (linux | osx | windows)",
+  "features": {
+  "openmp": {
+  "description": "Enable OpenMP multi-threading",
+  "supports": "!osx"
+  },
+  "shared": {
+  "description": "Build as shared library (.so/.dll/.dylib)"
+  }
+  }
+}
