@@ -38,7 +38,7 @@ struct SelectionResult {
     bool selected = false;
 };
 
-constexpr RuntimePolicy default_policy() noexcept {
+inline RuntimePolicy default_policy() noexcept {
     RuntimePolicy policy{};
     for (std::size_t i = 0; i < kRegistry.size(); ++i) {
         policy.family_policies[i] = FamilyPolicy{kRegistry[i].family, EnginePreference::RegistryDefault};

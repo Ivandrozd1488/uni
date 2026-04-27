@@ -173,7 +173,7 @@ template <class PredictFn>
     for (std::size_t r = 0; r < repeats; ++r) {
         for (const auto& row : rows) {
             const auto t0 = std::chrono::high_resolution_clock::now();
-            sink += predict_one(row);
+            sink = sink + predict_one(row);
             const auto t1 = std::chrono::high_resolution_clock::now();
             const auto us = std::chrono::duration_cast<std::chrono::duration<double, std::micro>>(t1 - t0).count();
             samples.push_back(us);

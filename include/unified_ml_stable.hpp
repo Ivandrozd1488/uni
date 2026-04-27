@@ -165,8 +165,6 @@ namespace pideeponet = ::pideeponet;
 namespace transformer = ::transformer;
 /** @brief Stable alias for kriging APIs. */
 namespace kriging = ::kriging;
-/** @brief Stable alias for SLE APIs. */
-namespace sle = ::core::models::sle;
 } // namespace core::models
 
 namespace unified_ml::stable {

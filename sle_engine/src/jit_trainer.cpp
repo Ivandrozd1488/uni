@@ -7,7 +7,11 @@
 #include <stdexcept>
 
 #if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
-#  include <immintrin.h>
+#  if defined(_MSC_VER)
+#    include <intrin.h>
+#  else
+#    include <immintrin.h>
+#  endif
 #  define UML_TRAINER_X86 1
 #endif
 
@@ -78,7 +82,13 @@ void synchronize_patch_site(CompiledBooleanCascade& compiled, std::size_t gate_i
 #if defined(UML_TRAINER_X86)
     _mm_clflush(compiled.raw_code() + offset);
     _mm_mfence();
+#if defined(__GNUC__) || defined(__clang__)
     asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
+#elif defined(_MSC_VER)
+    int cpu_info[4];
+    __cpuid(cpu_info, 0);
+    _ReadWriteBarrier();
+#endif
 #else
     // On non-x86 (e.g. ARM/Apple Silicon) use the compiler built-in to flush
     // the I-cache for the patched byte. _mm_clflush is x86-only.
