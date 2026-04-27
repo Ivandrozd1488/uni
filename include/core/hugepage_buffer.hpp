@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <stdexcept>
+#include <utility>
 
 #if defined(__linux__)
 #include <sys/mman.h>

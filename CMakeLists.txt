@@ -253,6 +253,12 @@ function(_uml_configure_target target)
     # (see the MSVC_RTC1_STRIPPED block near the top of CMakeLists.txt)
   else()
     set(_uml_warning_flags -Wall -Wextra -Wpedantic -Wno-deprecated-declarations)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      # #pragma omp simd may emit -Wpass-failed=transform-warning when the
+      # optimizer cannot vectorize a loop; this is informational, not a real bug.
+      # Suppress it so -Werror builds don't fail on clang.
+      list(APPEND _uml_warning_flags -Wno-pass-failed)
+    endif()
     if(UNIFIED_ML_ENABLE_WERROR)
       list(APPEND _uml_warning_flags -Werror)
     endif()
