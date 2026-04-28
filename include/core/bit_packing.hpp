@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include "core/span_compat.hpp"
 #include <vector>
 
 #if defined(__AVX512F__) || defined(__AVX2__)

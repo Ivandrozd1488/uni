@@ -29,8 +29,11 @@ void topo_sort(const std::shared_ptr<Node>&       n,
 {
     if (!n || visited.count(n.get())) return;
     visited.insert(n.get());
-    for (const auto& inp : n->inputs)
-        topo_sort(inp, order, visited);
+    for (const auto& inp_weak : n->inputs) {
+        if (auto inp = inp_weak.lock()) {
+            topo_sort(inp, order, visited);
+        }
+    }
     order.push_back(n);
 }
 

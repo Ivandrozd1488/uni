@@ -152,7 +152,7 @@ static inline double dot_product(const double* HPC_RESTRICT w,
     }
 #endif
     double acc_scalar = 0.0;
-    #pragma omp simd reduction(+:acc_scalar)
+    HPC_PRAGMA_OMP_SIMD_REDUCTION(+, acc_scalar)
     for (std::size_t j = 0; j < n; ++j) acc_scalar += w[j] * x[j];
     return acc_scalar;
 }

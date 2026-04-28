@@ -42,7 +42,7 @@ struct Node {
     // Input nodes from the forward pass.
     // Deduplicated (see mul / add) — the backward_fn handles repeated inputs
     // through explicit += accumulation.
-    std::vector<std::shared_ptr<Node>> inputs;
+    std::vector<std::weak_ptr<Node>> inputs;
 
     //   Fast-path backward closure                     
     // Reads this->grad and adds chain-rule contributions to each input node.

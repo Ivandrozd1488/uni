@@ -273,7 +273,7 @@ void test_gp() {
     std::vector<std::vector<double>> Y{{0.0, 1.0}, {0.5, 0.5}, {1.0, 0.0}, {1.5, -0.5}, {2.0, -1.0}};
     gp::GPParams params;
     params.kernel = gp::KernelType::RBFPlusLinear;
-    params.approximation = gp::ApproximationType::SparseNyström;
+    params.approximation = gp::ApproximationType::SparseNystrom;
     params.inducing_points = 3;
     params.output_correlation = 0.35;
     params.use_inducing_correction = true;

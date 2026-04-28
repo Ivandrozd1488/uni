@@ -11,6 +11,9 @@
 #include <cstdlib>
 #include <new>
 
+#define HPC_STRINGIFY_INNER(x) #x
+#define HPC_STRINGIFY(x) HPC_STRINGIFY_INNER(x)
+
 //   restrict qualifier                             
 // MSVC uses __restrict, GCC/Clang use __restrict__
 #ifdef _MSC_VER
@@ -47,13 +50,14 @@ inline void hpc_aligned_free(void* p) {
 // MSVC requires /openmp:experimental for #pragma omp simd.
 // If not available, we just skip the pragma (code still works, just no hint).
 // Usage: HPC_PRAGMA_OMP_SIMD before a for loop.
-#if defined(_MSC_VER) && !defined(_OPENMP_SIMD)
-  // MSVC without /openmp:experimental — skip simd pragma
+#if defined(_MSC_VER)
+  // MSVC OpenMP front-end support for `simd reduction` is limited unless using /openmp:llvm.
+  // Keep this a no-op to avoid warning C4849 on default MSVC OpenMP.
   #define HPC_PRAGMA_OMP_SIMD
   #define HPC_PRAGMA_OMP_SIMD_REDUCTION(op, var)
 #elif defined(_OPENMP)
   #define HPC_PRAGMA_OMP_SIMD _Pragma("omp simd")
-  #define HPC_PRAGMA_OMP_SIMD_REDUCTION(op, var) _Pragma("omp simd reduction(" #op ":" #var ")")
+  #define HPC_PRAGMA_OMP_SIMD_REDUCTION(op, var) _Pragma(HPC_STRINGIFY(omp simd reduction(op : var)))
 #else
   #define HPC_PRAGMA_OMP_SIMD
   #define HPC_PRAGMA_OMP_SIMD_REDUCTION(op, var)

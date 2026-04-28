@@ -666,9 +666,12 @@ void SVM::fit_regression_dual_nu(const std::vector<std::vector<double>>& X,
     }
 }
 
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
 double SVM::decision_function(std::span<const double> x) const {
     return decision_function(std::vector<double>(x.begin(), x.end()));
 }
+
+#endif
 
 double SVM::decision_function(const std::vector<double>& x) const {
     if (!fitted_) throw std::runtime_error("SVM::decision_function: model is not fitted");
@@ -678,9 +681,12 @@ double SVM::decision_function(const std::vector<double>& x) const {
     return binary_decision_function(binary_models_.front(), x);
 }
 
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
 BinaryDecision SVM::predict_binary(std::span<const double> x) const {
     return predict_binary(std::vector<double>(x.begin(), x.end()));
 }
+
+#endif
 
 BinaryDecision SVM::predict_binary(const std::vector<double>& x) const {
     if (!fitted_) throw std::runtime_error("SVM::predict_binary: model is not fitted");
@@ -772,18 +778,24 @@ std::vector<MultiClassPrediction> SVM::predict_multiclass(const std::vector<std:
     return out;
 }
 
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
 int SVM::predict(std::span<const double> x) const {
     return predict(std::vector<double>(x.begin(), x.end()));
 }
+
+#endif
 
 int SVM::predict(const std::vector<double>& x) const {
     if (is_regressor()) throw std::runtime_error("SVM::predict: classification API called on regressor");
     return predict_multiclass(x).label;
 }
 
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
 double SVM::predict_regression(std::span<const double> x) const {
     return predict_regression(std::vector<double>(x.begin(), x.end()));
 }
+
+#endif
 
 double SVM::predict_regression(const std::vector<double>& x) const {
     if (!is_regressor()) throw std::runtime_error("SVM::predict_regression: model is not a regressor");

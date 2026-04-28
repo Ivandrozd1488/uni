@@ -40,7 +40,6 @@ private:
     char delim_;
     std::string current_line_;
     std::vector<std::string> header_;
-    [[maybe_unused]] bool read_header_{false};
 
     static Row parse_line(const std::string& line, char delim);
 };

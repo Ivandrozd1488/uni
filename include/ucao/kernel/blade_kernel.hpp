@@ -11,6 +11,12 @@
 
 namespace ucao::kernel {
 
+#if defined(__GNUC__) || defined(__clang__)
+#define UCAO_GNU_ATTR(...) __attribute__((__VA_ARGS__))
+#else
+#define UCAO_GNU_ATTR(...)
+#endif
+
 namespace detail {
 
 template <int Mask>
@@ -60,7 +66,7 @@ template <int N, int P, int Q>
 inline constexpr auto kShufflePlans = make_shuffle_plans<N, P, Q>();
 
 template <int N, int P, int Q>
-[[gnu::target("avx512f,avx512vl"), gnu::flatten, gnu::noinline, gnu::optimize("unroll-loops")]]
+UCAO_GNU_ATTR(target("avx512f,avx512vl"), flatten, noinline, optimize("unroll-loops"))
 inline void gp_single_avx512_shuffled(float* __restrict__ out,
                                       const float* __restrict__ a,
                                       const float* __restrict__ b) noexcept {
@@ -98,7 +104,7 @@ inline void gp_single_avx512_shuffled(float* __restrict__ out,
  * @post out[c] = sum_a sign(a, a^c) * a[a] * b[a^c].
  */
 template <int N, int P, int Q>
-[[gnu::flatten, gnu::noinline]] inline void gp_single(
+UCAO_GNU_ATTR(flatten, noinline) inline void gp_single(
     float* __restrict__ out,
     const float* __restrict__ a,
     const float* __restrict__ b) noexcept {
@@ -127,7 +133,7 @@ template <int N, int P, int Q>
  * @post C[row*16 + lane] contains the GP result for the lane.
  */
 template <int N, int P, int Q>
-[[gnu::flatten, gnu::noinline]] inline void gp_avx512(
+UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512(
     float* __restrict__ C,
     const float* __restrict__ A,
     const float* __restrict__ B) noexcept {
@@ -152,7 +158,7 @@ template <int N, int P, int Q>
 }
 
 template <int P, int Q>
-[[gnu::flatten, gnu::noinline]] inline void gp_avx512_d32(
+UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512_d32(
     float* __restrict__ C,
     const float* __restrict__ A,
     const float* __restrict__ B) noexcept {
@@ -169,3 +175,5 @@ template <int P, int Q>
 }
 
 } // namespace ucao::kernel
+
+#undef UCAO_GNU_ATTR

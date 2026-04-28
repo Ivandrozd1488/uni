@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ucao/kernel/sign_table.hpp"
+#include "unified_ml_abi.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -10,6 +11,10 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+
+#ifdef _MSC_VER
+#include <malloc.h>
+#endif
 
 #ifdef __AVX512F__
 #include <immintrin.h>
@@ -24,11 +29,19 @@ struct AlignedAlloc {
             return nullptr;
         }
         const std::size_t rounded = ((bytes + Align - 1) / Align) * Align;
+#ifdef _MSC_VER
+        return _aligned_malloc(rounded, Align);
+#else
         return std::aligned_alloc(Align, rounded);
+#endif
     }
 
     static void free(void* p) noexcept {
+#ifdef _MSC_VER
+        _aligned_free(p);
+#else
         std::free(p);
+#endif
     }
 };
 
@@ -59,7 +72,7 @@ public:
     MVTensor(const MVTensor&) = delete;
     MVTensor& operator=(const MVTensor&) = delete;
 
-    [[nodiscard]] __attribute__((always_inline)) Scalar& at(int b, int d) noexcept {
+    [[nodiscard]] UNIFIED_ML_FORCEINLINE Scalar& at(int b, int d) noexcept {
 #ifndef NDEBUG
         assert(b >= 0 && b < batch_ && d >= 0 && d < D);
 #endif
@@ -67,7 +80,7 @@ public:
                                       : data_[static_cast<std::size_t>(d) * batch_ + b];
     }
 
-    [[nodiscard]] __attribute__((always_inline)) const Scalar& at(int b, int d) const noexcept {
+    [[nodiscard]] UNIFIED_ML_FORCEINLINE const Scalar& at(int b, int d) const noexcept {
 #ifndef NDEBUG
         assert(b >= 0 && b < batch_ && d >= 0 && d < D);
 #endif

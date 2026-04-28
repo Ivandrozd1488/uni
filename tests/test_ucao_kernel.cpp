@@ -8,12 +8,23 @@
 #include "ucao/ucao.hpp"
 
 std::size_t g_allocs = 0;
+
+#if defined(__SANITIZE_MEMORY__)
+#define UCAO_MSAN_ENABLED 1
+#elif defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#define UCAO_MSAN_ENABLED 1
+#endif
+#endif
+
+#ifndef UCAO_MSAN_ENABLED
 void* operator new(std::size_t sz) {
     ++g_allocs;
     if (void* p = std::malloc(sz)) return p;
     throw std::bad_alloc();
 }
 void operator delete(void* p) noexcept { std::free(p); }
+#endif
 
 namespace {
 

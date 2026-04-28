@@ -1,7 +1,11 @@
 #pragma once
 
 #include <cstddef>
-#include <span>
+#if defined(__has_include)
+#  if __has_include(<span>)
+#    include <span>
+#  endif
+#endif
 #include <string>
 #include <vector>
 
@@ -121,7 +125,9 @@ public:
      * @param x Feature view.
      * @return Raw decision value before thresholding.
      */
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
     double decision_function(std::span<const double> x) const;
+#endif
     /**
      * @brief Predict the class label for one sample.
      * @param x Feature vector.
@@ -133,7 +139,9 @@ public:
      * @param x Feature view.
      * @return Predicted class label.
      */
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
     int predict(std::span<const double> x) const;
+#endif
     std::vector<int> predict(const std::vector<std::vector<double>>& X) const;
     /**
      * @brief Predict a scalar regression response for one sample.
@@ -146,7 +154,9 @@ public:
      * @param x Feature view.
      * @return Predicted regression value.
      */
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
     double predict_regression(std::span<const double> x) const;
+#endif
     std::vector<double> predict_regression(const std::vector<std::vector<double>>& X) const;
 
     /**
@@ -160,7 +170,9 @@ public:
      * @param x Feature view.
      * @return Decision metadata including margin and calibrated probability.
      */
+#if defined(__cpp_lib_span) && (__cpp_lib_span >= 202002L)
     BinaryDecision predict_binary(std::span<const double> x) const;
+#endif
     std::vector<double> predict_scores(const std::vector<double>& x) const;
     std::vector<double> predict_proba(const std::vector<double>& x) const;
     std::vector<std::vector<double>> predict_proba(const std::vector<std::vector<double>>& X) const;

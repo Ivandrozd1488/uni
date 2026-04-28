@@ -9,14 +9,17 @@
 
 namespace ucao::kernel {
 
-static_assert(sizeof(__int128) == 16, "ucao: __int128 must be 128-bit");
-
 using fp64 = int64_t;
+using fp_accum = long double;
 inline constexpr int FP_LOG2 = 30;
 inline constexpr fp64 FP_SCALE = fp64(1) << FP_LOG2;
 
 [[nodiscard]] inline fp64 fp_mul(fp64 a, fp64 b) noexcept {
-    return static_cast<fp64>((static_cast<__int128>(a) * static_cast<__int128>(b)) >> FP_LOG2);
+    const fp_accum scaled =
+        (static_cast<fp_accum>(a) * static_cast<fp_accum>(b)) / static_cast<fp_accum>(FP_SCALE);
+    if (scaled > static_cast<fp_accum>(std::numeric_limits<fp64>::max())) return std::numeric_limits<fp64>::max();
+    if (scaled < static_cast<fp_accum>(std::numeric_limits<fp64>::min())) return std::numeric_limits<fp64>::min();
+    return static_cast<fp64>(std::llround(scaled));
 }
 
 [[nodiscard]] inline fp64 fp_add(fp64 a, fp64 b) noexcept {
@@ -24,17 +27,15 @@ inline constexpr fp64 FP_SCALE = fp64(1) << FP_LOG2;
 }
 
 [[nodiscard]] inline fp64 fp_inv_sqrt_nr(fp64 x_q30, int iters = 3) noexcept {
+    if (x_q30 <= 0) return 0;
     const float x_float = static_cast<float>(x_q30) / static_cast<float>(FP_SCALE);
-    fp64 y = static_cast<fp64>(static_cast<double>(FP_SCALE) / std::sqrt(static_cast<double>(x_float)));
-    const __int128 S2 = static_cast<__int128>(FP_SCALE) * static_cast<__int128>(FP_SCALE);
+    fp_accum y = 1.0L / std::sqrt(static_cast<fp_accum>(x_float));
     for (int i = 0; i < iters; ++i) {
-        const __int128 y2_q60 = static_cast<__int128>(y) * static_cast<__int128>(y);
-        const __int128 xy2_q60 = (static_cast<__int128>(x_q30) * y2_q60) >> FP_LOG2;
-        const __int128 numer = static_cast<__int128>(y) * (3 * S2 - xy2_q60);
-        const __int128 denom = 2 * S2;
-        y = static_cast<fp64>(numer / denom);
+        y = y * (1.5L - 0.5L * (static_cast<fp_accum>(x_float) * y * y));
     }
-    return y;
+    const fp_accum q30 = y * static_cast<fp_accum>(FP_SCALE);
+    if (q30 > static_cast<fp_accum>(std::numeric_limits<fp64>::max())) return std::numeric_limits<fp64>::max();
+    return static_cast<fp64>(std::llround(q30));
 }
 
 namespace detail {
@@ -86,17 +87,17 @@ struct FPMultivector {
         return out;
     }
 
-    [[nodiscard]] __int128 norm_sq_q60() const noexcept {
-        __int128 acc = 0;
+    [[nodiscard]] fp_accum norm_sq_q60() const noexcept {
+        fp_accum acc = 0;
         for (int i = 0; i < D; ++i) {
-            acc += static_cast<__int128>(detail::reversion_sign_fp<N>(i)) *
-                   static_cast<__int128>(comps[i]) * static_cast<__int128>(comps[i]);
+            const fp_accum term = static_cast<fp_accum>(comps[i]) * static_cast<fp_accum>(comps[i]);
+            acc += static_cast<fp_accum>(detail::reversion_sign_fp<N>(i)) * term;
         }
         return acc;
     }
 
     [[nodiscard]] bool is_unit_rotor(fp64 tol_q30 = fp64(1) << 10) const noexcept {
-        const fp64 norm_q30 = static_cast<fp64>(norm_sq_q60() >> FP_LOG2);
+        const fp64 norm_q30 = static_cast<fp64>(norm_sq_q60() / static_cast<fp_accum>(FP_SCALE));
         const fp64 diff = norm_q30 >= FP_SCALE ? (norm_q30 - FP_SCALE) : (FP_SCALE - norm_q30);
         return diff < tol_q30;
     }
@@ -105,13 +106,13 @@ struct FPMultivector {
         if (is_unit_rotor()) {
             return;
         }
-        const fp64 norm_q30 = static_cast<fp64>(norm_sq_q60() >> FP_LOG2);
+        const fp64 norm_q30 = static_cast<fp64>(norm_sq_q60() / static_cast<fp_accum>(FP_SCALE));
         if (norm_q30 <= 0) {
             return;
         }
         const fp64 inv = fp_inv_sqrt_nr(norm_q30, iters);
         for (int i = 0; i < D; ++i) {
-            comps[i] = static_cast<fp64>((static_cast<__int128>(comps[i]) * inv) >> FP_LOG2);
+            comps[i] = fp_mul(comps[i], inv);
         }
     }
 
@@ -128,7 +129,8 @@ struct FPMultivector {
     }
 
     [[nodiscard]] float rotor_error() const noexcept {
-        const double norm = static_cast<double>(norm_sq_q60()) / static_cast<double>(FP_SCALE) / static_cast<double>(FP_SCALE);
+        const double norm = static_cast<double>(norm_sq_q60()) /
+                            static_cast<double>(FP_SCALE) / static_cast<double>(FP_SCALE);
         return static_cast<float>(std::fabs(norm - 1.0));
     }
 };
@@ -139,16 +141,19 @@ template <int N, int P, int Q, int R>
     FPMultivector<N, P, Q, R> C;
     static constexpr int D = 1 << N;
     for (int c = 0; c < D; ++c) {
-        __int128 acc = 0;
+        fp_accum acc = 0;
         const auto& entries = kGPTable<N, P, Q, R>.sparse_[c];
         const int nnz = kGPTable<N, P, Q, R>.nnz_[c];
         for (int i = 0; i < nnz; ++i) {
             const auto e = entries[i];
-            acc += static_cast<__int128>(e.sign) *
-                   static_cast<__int128>(A.comps[e.a]) *
-                   static_cast<__int128>(B.comps[e.a ^ c]);
+            acc += static_cast<fp_accum>(e.sign) *
+                   static_cast<fp_accum>(A.comps[e.a]) *
+                   static_cast<fp_accum>(B.comps[e.a ^ c]);
         }
-        C.comps[c] = static_cast<fp64>(acc >> FP_LOG2);
+        const fp_accum scaled = acc / static_cast<fp_accum>(FP_SCALE);
+        if (scaled > static_cast<fp_accum>(std::numeric_limits<fp64>::max())) C.comps[c] = std::numeric_limits<fp64>::max();
+        else if (scaled < static_cast<fp_accum>(std::numeric_limits<fp64>::min())) C.comps[c] = std::numeric_limits<fp64>::min();
+        else C.comps[c] = static_cast<fp64>(std::llround(scaled));
     }
     return C;
 }

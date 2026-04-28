@@ -11,7 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include "core/span_compat.hpp"
 #include <vector>
 
 namespace core::models::sle {
@@ -76,7 +76,11 @@ private:
     std::vector<std::vector<float>> xgb_features;
     xgb_features.reserve(features.size());
     for (const auto& row : features) {
-        xgb_features.emplace_back(row.begin(), row.end());
+        auto& out_row = xgb_features.emplace_back();
+        out_row.reserve(row.size());
+        for (const double value : row) {
+            out_row.push_back(static_cast<float>(value));
+        }
     }
 
     const auto predictions_f = model.predict(xgb_features);

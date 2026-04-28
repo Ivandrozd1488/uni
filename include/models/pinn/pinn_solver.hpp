@@ -8,7 +8,7 @@
 #include "ucao/engine_policy.hpp"
 
 #include <memory>
-#include <span>
+#include "core/span_compat.hpp"
 #include <unordered_map>
 #include <vector>
 

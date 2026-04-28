@@ -16,6 +16,10 @@ set(CMAKE_CXX_STANDARD    20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS    OFF)
 
+if(MSVC)
+  add_definitions(-D_USE_MATH_DEFINES)
+endif()
+
 # ABI / SONAME policy
 # SOVERSION tracks the major version for conventional dynamic-linker lookup.
 # This is a packaging aid, not a blanket promise that every 1.x build is ABI-identical.
@@ -95,6 +99,32 @@ if(MSVC)
   endforeach()
   unset(_flags)
   unset(_cfg)
+endif()
+
+# Sanitizer/coverage flags must be applied consistently to all final link targets
+# (libraries and executables). If only the library is instrumented, test binaries
+# can fail to link with missing runtime symbols (e.g. MSan).
+if(NOT MSVC)
+  if(UNIFIED_ML_ENABLE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address -fno-omit-frame-pointer)
+  endif()
+  if(UNIFIED_ML_ENABLE_UBSAN)
+    add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=undefined -fno-omit-frame-pointer)
+  endif()
+  if(UNIFIED_ML_ENABLE_MSAN)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      add_compile_options(-fsanitize=memory -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer)
+      add_link_options(-fsanitize=memory -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer)
+    else()
+      message(FATAL_ERROR "UNIFIED_ML_ENABLE_MSAN requires Clang")
+    endif()
+  endif()
+  if(UNIFIED_ML_ENABLE_COVERAGE)
+    add_compile_options(-O0 -g --coverage)
+    add_link_options(--coverage)
+  endif()
 endif()
 
 # Sources             

@@ -8,6 +8,10 @@
 #include <stdexcept>
 #include <utility>
 
+#if defined(_MSC_VER)
+#include <malloc.h>
+#endif
+
 #if defined(__linux__)
 #include <sys/mman.h>
 #include <unistd.h>
@@ -61,9 +65,16 @@ public:
         }
 #endif
         void* ptr = nullptr;
+#if defined(_MSC_VER)
+        ptr = _aligned_malloc(bytes, 64);
+        if (ptr == nullptr) {
+            throw std::bad_alloc();
+        }
+#else
         if (posix_memalign(&ptr, 64, bytes) != 0 || ptr == nullptr) {
             throw std::bad_alloc();
         }
+#endif
         data_ = static_cast<std::uint8_t*>(ptr);
         size_ = bytes;
         mmap_backed_ = false;
@@ -78,6 +89,8 @@ public:
         } else {
             std::free(data_);
         }
+#elif defined(_MSC_VER)
+        _aligned_free(data_);
 #else
         std::free(data_);
 #endif

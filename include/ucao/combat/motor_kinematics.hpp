@@ -2,6 +2,8 @@
 
 #include "ucao/kernel/fp_multivector.hpp"
 
+#include <cstdint>
+
 namespace ucao::combat {
 
 using fp64 = ucao::kernel::fp64;
@@ -44,9 +46,15 @@ struct MotorKinematics {
      */
     [[nodiscard]] static FPM lerp_normalized(const FPM& M1, const FPM& M2, fp64 t_q30) noexcept {
         FPM out;
+        constexpr std::int64_t kScale = static_cast<std::int64_t>(1) << ucao::kernel::FP_LOG2;
+        const std::int64_t t = static_cast<std::int64_t>(t_q30);
+        const std::int64_t one_minus_t = kScale - t;
         for (int i = 0; i < FPM::D; ++i) {
-            const __int128 delta = static_cast<__int128>(M2.comps[i]) - static_cast<__int128>(M1.comps[i]);
-            out.comps[i] = M1.comps[i] + static_cast<fp64>((delta * t_q30) >> ucao::kernel::FP_LOG2);
+            const std::int64_t m1 = static_cast<std::int64_t>(M1.comps[i]);
+            const std::int64_t m2 = static_cast<std::int64_t>(M2.comps[i]);
+            const std::int64_t left = (m1 / kScale) * one_minus_t + ((m1 % kScale) * one_minus_t) / kScale;
+            const std::int64_t right = (m2 / kScale) * t + ((m2 % kScale) * t) / kScale;
+            out.comps[i] = static_cast<fp64>(left + right);
         }
         out.reorthogonalize(3);
         return out;

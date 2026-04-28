@@ -20,7 +20,7 @@ enum class KernelType {
 enum class ApproximationType {
     Exact,
     SubsetOfRegressors,
-    SparseNyström
+    SparseNystrom
 };
 
 enum class TaskType {

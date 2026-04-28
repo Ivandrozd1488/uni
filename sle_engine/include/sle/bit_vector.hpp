@@ -13,6 +13,18 @@
 
 namespace sle {
 
+namespace detail {
+
+[[nodiscard]] inline std::size_t popcount64(std::uint64_t value) noexcept {
+#if defined(__cpp_lib_bitops) && (__cpp_lib_bitops >= 201907L)
+    return static_cast<std::size_t>(std::popcount(value));
+#else
+    return static_cast<std::size_t>(__builtin_popcountll(static_cast<unsigned long long>(value)));
+#endif
+}
+
+} // namespace detail
+
 class BitVector {
 public:
     BitVector() = default;
@@ -53,14 +65,14 @@ public:
             const __m512i v = _mm512_loadu_si512(reinterpret_cast<const void*>(words_.data() + i));
             _mm512_store_si512(reinterpret_cast<void*>(tmp), v);
             for (std::size_t lane = 0; lane < lanes; ++lane) {
-                count += static_cast<std::size_t>(std::popcount(tmp[lane]));
+                count += static_cast<std::size_t>(detail::popcount64(tmp[lane]));
             }
         }
         for (std::size_t i = simd_words; i < words_.size(); ++i) {
-            count += static_cast<std::size_t>(std::popcount(words_[i]));
+            count += static_cast<std::size_t>(detail::popcount64(words_[i]));
         }
 #else
-        for (auto word : words_) count += static_cast<std::size_t>(std::popcount(word));
+        for (auto word : words_) count += static_cast<std::size_t>(detail::popcount64(word));
 #endif
         return count;
     }
@@ -73,7 +85,7 @@ public:
         ensure_same_size(other);
         std::size_t count = 0;
         for (std::size_t i = 0; i < words_.size(); ++i) {
-            count += static_cast<std::size_t>(std::popcount(words_[i] ^ other.words_[i]));
+            count += static_cast<std::size_t>(detail::popcount64(words_[i] ^ other.words_[i]));
         }
         return count;
     }

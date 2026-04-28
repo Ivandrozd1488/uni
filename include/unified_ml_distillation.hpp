@@ -18,7 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
-#include <span>
+#include "core/span_compat.hpp"
 #include <stdexcept>
 #include <string>
 #include <type_traits>

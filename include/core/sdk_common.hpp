@@ -1,6 +1,6 @@
 #pragma once
 
-#include <span>
+#include "core/span_compat.hpp"
 #include <stdexcept>
 #include <string>
 
