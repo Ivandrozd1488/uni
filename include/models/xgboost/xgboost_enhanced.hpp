@@ -109,6 +109,7 @@ public:
 
   // Hyperparameter setters (fluent interface)      
   XGBModel& task     (const std::string& t);
+  XGBModel& objective  (const std::string& obj); // maps XGBoost objective strings to task
   XGBModel& n_estimators (int n);
   XGBModel& learning_rate  (float lr);
   XGBModel& max_depth  (int d);

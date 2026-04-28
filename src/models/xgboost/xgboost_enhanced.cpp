@@ -81,6 +81,22 @@ XGBModel::XGBModel(const std::string& task)
 //  Fluent setters
 // =============================================================================
 XGBModel& XGBModel::task     (const std::string& t) { task_ = t; return *this; }
+XGBModel& XGBModel::objective(const std::string& obj) {
+  // Map XGBoost-style objective strings to internal task names
+  if (obj == "binary:logistic" || obj == "binary:logitraw" || obj == "binary:hinge")
+    task_ = "binary";
+  else if (obj.rfind("reg:", 0) == 0 || obj == "count:poisson")
+    task_ = "regression";
+  else if (obj == "multi:softmax" || obj == "multi:softprob")
+    task_ = "multiclass";
+  else if (obj.rfind("rank:", 0) == 0)
+    task_ = "ranking";
+  else if (obj == "survival:cox" || obj == "survival:aft")
+    task_ = "survival";
+  else
+    task_ = obj;  // pass through unknown objectives as-is
+  return *this;
+}
 XGBModel& XGBModel::n_estimators (int n) { n_estimators_  = n;  return *this; }
 XGBModel& XGBModel::learning_rate  (float l) { learning_rate_ = l;  return *this; }
 XGBModel& XGBModel::max_depth  (int d) { max_depth_   = d;  return *this; }
