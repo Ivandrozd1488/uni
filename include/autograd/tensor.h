@@ -105,6 +105,13 @@ public:
     ///                      second-order differentiation.
     void backward(bool retain_graph = false, bool create_graph = false);
 
+    /// Run reverse-mode autodiff seeded with an explicit gradient tensor
+    /// (analogous to PyTorch's tensor.backward(gradient)).
+    /// @param gradient      Seed gradient; must have the same numel() as *this.
+    /// @param retain_graph  See the bool overload.
+    /// @param create_graph  See the bool overload.
+    void backward(const Tensor& gradient, bool retain_graph = false, bool create_graph = false);
+
     /// Reset accumulated gradient to zero on this tensor's node.
     void zero_grad();
 

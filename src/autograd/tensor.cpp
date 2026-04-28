@@ -382,4 +382,40 @@ Tensor Tensor::operator/(double s) const {
 
 Tensor Tensor::operator-() const { return (*this) * (-1.0); }
 
+
+void Tensor::backward(const Tensor& gradient, bool retain_graph, bool create_graph) {
+    if (!requires_grad_)
+        throw std::runtime_error(
+            "backward(): called on a tensor with requires_grad=false");
+    require_graph_preserving("backward()");
+    if (gradient.numel() != numel())
+        throw std::runtime_error(
+            "backward(): gradient numel (" + std::to_string(gradient.numel()) +
+            ") does not match tensor numel (" + std::to_string(numel()) + ")");
+
+    // Seed node_->grad from the provided gradient tensor instead of 1.0
+    const std::size_t n = numel();
+    node_->grad.assign(n, 0.0);
+    for (std::size_t i = 0; i < n; ++i)
+        node_->grad[i] = gradient.value_flat(i);
+
+    if (create_graph) {
+        functional::grad(*this, *this,
+                         /*retain_graph=*/true,
+                         /*create_graph=*/true);
+        return;
+    }
+
+    std::vector<std::shared_ptr<Node>> order;
+    std::unordered_set<Node*>          visited;
+    topo_sort(node_, order, visited);
+
+    for (int i = static_cast<int>(order.size()) - 1; i >= 0; --i) {
+        const auto& nd = order[static_cast<std::size_t>(i)];
+        if (nd->backward_fn) nd->backward_fn();
+    }
+
+    if (!retain_graph) release_graph(order);
+}
+
 }  // namespace autograd
