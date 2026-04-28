@@ -107,13 +107,20 @@ autograd::Tensor Linear::forward(const autograd::Tensor& input)
     const autograd::Tensor input_capture  = input;
     const autograd::Tensor weight_capture = weight_;
 
-    out_node->backward_fn = [out_node,
+    // Use a weak_ptr so the backward closure does not create a reference cycle:
+    // out_node owns backward_fn, so capturing out_node as shared_ptr would keep
+    // the node alive indefinitely even when the Tensor goes out of scope.
+    std::weak_ptr<autograd::Node> out_weak = out_node;
+
+    out_node->backward_fn = [out_weak,
                                w_node, b_node, x_node,
                                input_capture,
                                weight_capture,
                                batch, in_f, out_f]()
     {
-        const auto& go = out_node->grad;    // shape [batch * out_f]
+        auto out_locked = out_weak.lock();
+        if (!out_locked) return;
+        const auto& go = out_locked->grad;    // shape [batch * out_f]
         const double* x_ptr = input_capture.data().data();
 
         // dW[i, j] += sum_b  go[b*out_f + i] * x[b*in_f + j]

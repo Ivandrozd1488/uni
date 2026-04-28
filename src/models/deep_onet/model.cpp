@@ -76,8 +76,14 @@ autograd::Tensor row_sum_2d(const autograd::Tensor& x) {
     out_node->is_leaf = false;
     out_node->inputs.push_back(x_node);
 
-    out_node->backward_fn = [out_node, x_node, batch, cols]() {
-        const auto& go = out_node->grad;  // [batch,1] flattened to [batch]
+    // Use weak_ptr to avoid a reference cycle: the node owns backward_fn,
+    // so capturing out_node as shared_ptr would keep the node alive indefinitely.
+    std::weak_ptr<autograd::Node> out_weak = out_node;
+
+    out_node->backward_fn = [out_weak, x_node, batch, cols]() {
+        auto out_locked = out_weak.lock();
+        if (!out_locked) return;
+        const auto& go = out_locked->grad;  // [batch,1] flattened to [batch]
         auto& gx = x_node->grad;          // [batch,cols]
         for (std::size_t i = 0; i < batch; ++i) {
             const double gi = go[i];

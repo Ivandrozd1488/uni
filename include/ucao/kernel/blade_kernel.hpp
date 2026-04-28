@@ -11,10 +11,21 @@
 
 namespace ucao::kernel {
 
+// Compiler-specific attribute helpers
 #if defined(__GNUC__) || defined(__clang__)
-#define UCAO_GNU_ATTR(...) __attribute__((__VA_ARGS__))
+#  define UCAO_GNU_ATTR(...) __attribute__((__VA_ARGS__))
 #else
-#define UCAO_GNU_ATTR(...)
+#  define UCAO_GNU_ATTR(...)
+#endif
+
+// Portable restrict qualifier: MSVC spells it __restrict (no trailing __),
+// while GCC and Clang use __restrict__ (with trailing __).
+#if defined(_MSC_VER)
+#  define UCAO_RESTRICT __restrict
+#elif defined(__GNUC__) || defined(__clang__)
+#  define UCAO_RESTRICT __restrict__
+#else
+#  define UCAO_RESTRICT
 #endif
 
 namespace detail {
@@ -67,9 +78,9 @@ inline constexpr auto kShufflePlans = make_shuffle_plans<N, P, Q>();
 
 template <int N, int P, int Q>
 UCAO_GNU_ATTR(target("avx512f,avx512vl"), flatten, noinline, optimize("unroll-loops"))
-inline void gp_single_avx512_shuffled(float* __restrict__ out,
-                                      const float* __restrict__ a,
-                                      const float* __restrict__ b) noexcept {
+inline void gp_single_avx512_shuffled(float* UCAO_RESTRICT out,
+                                      const float* UCAO_RESTRICT a,
+                                      const float* UCAO_RESTRICT b) noexcept {
     static constexpr int D = 1 << N;
     alignas(64) float a_pad[16]{};
     alignas(64) float b_pad[16]{};
@@ -105,9 +116,9 @@ inline void gp_single_avx512_shuffled(float* __restrict__ out,
  */
 template <int N, int P, int Q>
 UCAO_GNU_ATTR(flatten, noinline) inline void gp_single(
-    float* __restrict__ out,
-    const float* __restrict__ a,
-    const float* __restrict__ b) noexcept {
+    float* UCAO_RESTRICT out,
+    const float* UCAO_RESTRICT a,
+    const float* UCAO_RESTRICT b) noexcept {
     static constexpr int D = 1 << N;
 #ifdef __AVX512F__
     if constexpr ((N == 3 && P == 3 && Q == 0) || (N == 4 && P == 4 && Q == 0) || (N == 4 && P == 3 && Q == 1)) {
@@ -134,9 +145,9 @@ UCAO_GNU_ATTR(flatten, noinline) inline void gp_single(
  */
 template <int N, int P, int Q>
 UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512(
-    float* __restrict__ C,
-    const float* __restrict__ A,
-    const float* __restrict__ B) noexcept {
+    float* UCAO_RESTRICT C,
+    const float* UCAO_RESTRICT A,
+    const float* UCAO_RESTRICT B) noexcept {
 #ifdef __AVX512F__
     static constexpr int D = 1 << N;
     for (int c = 0; c < D; ++c) {
@@ -159,9 +170,9 @@ UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512(
 
 template <int P, int Q>
 UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512_d32(
-    float* __restrict__ C,
-    const float* __restrict__ A,
-    const float* __restrict__ B) noexcept {
+    float* UCAO_RESTRICT C,
+    const float* UCAO_RESTRICT A,
+    const float* UCAO_RESTRICT B) noexcept {
 #ifdef __AVX512F__
     alignas(64) float tmp_lo[16 * 16]{};
     alignas(64) float tmp_hi[16 * 16]{};
@@ -177,3 +188,4 @@ UCAO_GNU_ATTR(flatten, noinline) inline void gp_avx512_d32(
 } // namespace ucao::kernel
 
 #undef UCAO_GNU_ATTR
+#undef UCAO_RESTRICT
