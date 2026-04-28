@@ -121,10 +121,9 @@ if(NOT MSVC)
       message(FATAL_ERROR "UNIFIED_ML_ENABLE_MSAN requires Clang")
     endif()
   endif()
-  if(UNIFIED_ML_ENABLE_COVERAGE)
-    add_compile_options(-O0 -g --coverage)
-    add_link_options(--coverage)
-  endif()
+  # Coverage flags are applied per-target in unified_ml_configure_target()
+  # to avoid duplicate instrumentation that corrupts gcda counter files.
+  # Do NOT add global add_compile_options(--coverage) here.
 endif()
 
 # Sources             
@@ -595,6 +594,61 @@ if(UNIFIED_ML_BUILD_TESTS)
     add_executable(ucao_demo tests/ucao_demo.cpp)
     target_link_libraries(ucao_demo PRIVATE unified_ml::unified_ml)
     add_test(NAME ucao_demo COMMAND ucao_demo)
+  endif()
+
+  # ── Unit tests for previously-uncovered core subsystems ──────────────────
+  foreach(_ut
+      test_core_linalg
+      test_core_random
+      test_core_activations
+      test_core_optimizers
+      test_xgboost_units
+  )
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${_ut}.cpp")
+      add_executable(${_ut} "tests/${_ut}.cpp")
+      target_link_libraries(${_ut} PRIVATE unified_ml::unified_ml)
+      add_test(NAME ${_ut} COMMAND ${_ut})
+      set_tests_properties(${_ut} PROPERTIES TIMEOUT 60)
+      if(WIN32 AND UNIFIED_ML_BUILD_SHARED)
+        set_tests_properties(${_ut} PROPERTIES
+          ENVIRONMENT "PATH=$<TARGET_FILE_DIR:unified_ml>;$ENV{PATH}")
+      endif()
+    endif()
+  endforeach()
+endif()
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Coverage report target  (gcovr — requires Python + gcovr installed)
+#
+#  Usage:
+#    cmake -B build -DUNIFIED_ML_ENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+#    cmake --build build
+#    cd build && ctest
+#    cmake --build build --target coverage
+# ══════════════════════════════════════════════════════════════════════════════
+if(UNIFIED_ML_ENABLE_COVERAGE)
+  find_program(GCOVR_EXECUTABLE gcovr)
+  if(GCOVR_EXECUTABLE)
+    add_custom_target(coverage
+      COMMAND ${GCOVR_EXECUTABLE}
+              --root "${CMAKE_SOURCE_DIR}"
+              --object-directory "${CMAKE_BINARY_DIR}"
+              --exclude "${CMAKE_SOURCE_DIR}/tests/.*"
+              --exclude "${CMAKE_SOURCE_DIR}/examples/.*"
+              --exclude "${CMAKE_SOURCE_DIR}/benchmark.*\\.cpp"
+              --exclude ".*abi\\.cpp"
+              --exclude ".*types\\.cpp"
+              --exclude ".*tree_node\\.cpp"
+              --exclude-unreachable-branches
+              --print-summary
+              --html-details "${CMAKE_BINARY_DIR}/coverage/index.html"
+      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+      COMMENT "Generating HTML coverage report → build/coverage/index.html"
+      VERBATIM
+    )
+    message(STATUS "Coverage target: 'cmake --build build --target coverage'")
+  else()
+    message(STATUS "gcovr not found — 'coverage' target unavailable; install with: pip install gcovr")
   endif()
 endif()
 
