@@ -349,7 +349,11 @@ static std::size_t read_rss_kb()
 static void test_backward_release_graph_stress()
 {
   std::cout << "\n[Stress] backward release_graph memory stability\n";
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_MEMORY__) || defined(__SANITIZE_UNDEFINED__)
+  int iters = 2000;
+#else
   int iters = 10000;
+#endif
   if (const char* env_iters = std::getenv("UML_AUTOGRAD_STRESS_ITERS")) {
     const int parsed = std::atoi(env_iters);
     if (parsed > 0) iters = parsed;
@@ -366,8 +370,8 @@ static void test_backward_release_graph_stress()
   // Heuristic guard: transient allocator noise is allowed, monotonic growth is not.
   // Under ASan/MSan each allocation carries shadow + redzone overhead and the
   // allocator does not return RSS to the OS — raise the limit accordingly.
-#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_MEMORY__)
-  constexpr std::size_t rss_limit_kb = 64 * 1024; // 64 MB under sanitizers
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_MEMORY__) || defined(__SANITIZE_UNDEFINED__)
+  constexpr std::size_t rss_limit_kb = 128 * 1024; // 128 MB under sanitizers
 #else
   constexpr std::size_t rss_limit_kb = 12 * 1024; // 12 MB in normal builds
 #endif

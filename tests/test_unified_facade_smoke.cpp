@@ -1,7 +1,14 @@
 #include <unified_ml_stable.hpp>
 
 #include <filesystem>
+#include <string>
 #include <vector>
+
+namespace {
+std::filesystem::path temp_file(const std::string& name) {
+    return std::filesystem::temp_directory_path() / name;
+}
+}
 
 int main() {
     std::vector<std::vector<double>> X{{0.0, 0.0}, {0.0, 1.0}, {1.0, 0.0}, {1.0, 1.0}};
@@ -30,7 +37,7 @@ int main() {
     if (out.values.size() != X.size()) return 4;
     if (out.probabilities.size() != X.size()) return 5;
 
-    const std::filesystem::path path = "/tmp/unified_rf_artifact.bin";
+    const std::filesystem::path path = temp_file("unified_rf_artifact.bin");
     artifact.save(path.string());
     auto loaded = unified_ml::ModelArtifact::load(unified_ml::ModelKind::RandomForest, path.string());
     auto loaded_out = loaded.run(dataset);
@@ -46,7 +53,7 @@ int main() {
     if (pred_summary.output.values.size() != X.size()) return 10;
     if (pred_summary.evaluation.task != unified_ml::MetricTask::Classification) return 11;
 
-    const std::filesystem::path tabular_path = "/tmp/unified_rf_tabular.bin";
+    const std::filesystem::path tabular_path = temp_file("unified_rf_tabular.bin");
     tabular.save(tabular_path.string());
     auto loaded_tabular = unified_ml::TabularModel::load(unified_ml::TabularModelKind::RandomForest, tabular_path.string());
     auto loaded_tabular_pred = loaded_tabular.predict(dataset, 2);
@@ -60,7 +67,7 @@ int main() {
     if (pca_fit.cols != 2) return 14;
     auto pca_run = pca_model.run(dataset);
     if (pca_run.transformed.rows() != X.size()) return 15;
-    const std::filesystem::path pca_path = "/tmp/unified_pca.bin";
+    const std::filesystem::path pca_path = temp_file("unified_pca.bin");
     pca_model.save(pca_path.string());
     auto loaded_pca = unified_ml::AdvancedModel::load(unified_ml::AdvancedModelKind::PCA, pca_path.string());
     auto loaded_pca_run = loaded_pca.run(dataset);
@@ -71,7 +78,7 @@ int main() {
     if (!iforest_fit.capabilities.supports_batch_inference) return 17;
     auto iforest_run = iforest_model.run(dataset);
     if (iforest_run.values.size() != X.size()) return 18;
-    const std::filesystem::path iforest_path = "/tmp/unified_iforest.bin";
+    const std::filesystem::path iforest_path = temp_file("unified_iforest.bin");
     iforest_model.save(iforest_path.string());
     auto loaded_iforest = unified_ml::AdvancedModel::load(unified_ml::AdvancedModelKind::IsolationForest, iforest_path.string());
     auto loaded_iforest_run = loaded_iforest.run(dataset);
@@ -82,7 +89,7 @@ int main() {
     unified_ml::AdvancedModel gp_model(unified_ml::GPSpec{});
     auto gp_fit = gp_model.fit(reg_dataset);
     if (!gp_fit.capabilities.supports_serialization) return 20;
-    const std::filesystem::path gp_path = "/tmp/unified_gp.bin";
+    const std::filesystem::path gp_path = temp_file("unified_gp.bin");
     gp_model.save(gp_path.string());
     auto loaded_gp = unified_ml::AdvancedModel::load(unified_ml::AdvancedModelKind::GaussianProcess, gp_path.string());
     auto loaded_gp_run = loaded_gp.run(reg_dataset);
@@ -92,7 +99,7 @@ int main() {
     std::vector<std::vector<double>> sindy_X{{0.0, 1.0}, {1.0, 0.0}, {2.0, -1.0}, {3.0, -2.0}};
     sindy::SINDy low_sindy;
     low_sindy.fit(sindy_X, xdot);
-    const std::filesystem::path sindy_path = "/tmp/unified_sindy.bin";
+    const std::filesystem::path sindy_path = temp_file("unified_sindy.bin");
     low_sindy.save(sindy_path.string());
     auto loaded_sindy = sindy::SINDy::load(sindy_path.string());
     if (loaded_sindy.equations().empty()) return 22;
@@ -102,7 +109,7 @@ int main() {
     if (mlp_fit.rows != X.size()) return 23;
     auto mlp_pred = mlp.predict(dataset, 2);
     if (mlp_pred.output.values.size() != X.size()) return 24;
-    const std::filesystem::path mlp_path = "/tmp/unified_mlp.bin";
+    const std::filesystem::path mlp_path = temp_file("unified_mlp.bin");
     mlp.save(mlp_path.string());
     auto loaded_mlp = unified_ml::UnifiedMLP::load(mlp_path.string());
     auto loaded_mlp_pred = loaded_mlp.predict(dataset, 2);

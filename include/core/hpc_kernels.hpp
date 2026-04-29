@@ -274,12 +274,6 @@ inline void gemm_hpc(
     const bool use_avx512 = runtime_has_avx512();
 #endif
     double* B_packed = thread_local_scratch(HPC_KC * HPC_NC);
-#if !defined(__SANITIZE_MEMORY__)
-    const bool can_par = (M > (std::size_t)HPC_MR*2)
-                         && !omp_in_parallel()
-                         && (M*K*N > (std::size_t)HPC_PAR_THRESHOLD);
-#endif
-
     for (std::size_t k0=0;k0<K;k0+=HPC_KC) {
         std::size_t kb=std::min((std::size_t)HPC_KC,K-k0);
         for (std::size_t j0=0;j0<N;j0+=HPC_NC) {
@@ -288,7 +282,7 @@ inline void gemm_hpc(
             std::size_t nmc=(M+HPC_MC-1)/HPC_MC;
 
             #if !defined(__SANITIZE_MEMORY__)
-            #pragma omp parallel for schedule(static) if(can_par)
+            #pragma omp parallel for schedule(static) if((M > (std::size_t)HPC_MR*2) && !omp_in_parallel() && (M*K*N > (std::size_t)HPC_PAR_THRESHOLD))
             #endif
             for (int bi=0;bi<(int)nmc;++bi) {
                 std::size_t i0=bi*HPC_MC, mb=std::min((std::size_t)HPC_MC,M-i0);
@@ -424,8 +418,7 @@ inline void transpose_hpc(const double* HPC_RESTRICT src, double* HPC_RESTRICT d
     std::size_t rows, std::size_t cols) noexcept {
     constexpr std::size_t TB=32;
 #if !defined(__SANITIZE_MEMORY__)
-    const bool par=(rows*cols>10000)&&!omp_in_parallel();
-    #pragma omp parallel for schedule(static) if(par)
+    #pragma omp parallel for schedule(static) if((rows*cols>10000)&&!omp_in_parallel())
 #endif
     for (int i0=0;i0<(int)rows;i0+=TB) {
         for (std::size_t j0=0;j0<cols;j0+=TB) {
