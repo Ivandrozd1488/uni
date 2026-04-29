@@ -385,6 +385,13 @@ function(_uml_configure_target target)
   # /openmp   → OpenMP 2.0 (default).  Does NOT support #pragma omp simd.
   # /openmp:experimental → OpenMP SIMD + parallel (needed for our code).
   # We must add /openmp:experimental explicitly; OpenMP::OpenMP_CXX only adds /openmp.
+
+  # MSan is incompatible with uninstrumented libomp.so — disable OpenMP.
+  if(UNIFIED_ML_ENABLE_MSAN)
+    set(UNIFIED_ML_ENABLE_OPENMP OFF CACHE BOOL "" FORCE)
+    message(STATUS "MSan build: OpenMP disabled (libomp.so not MSan-instrumented)")
+  endif()
+
   if(UNIFIED_ML_ENABLE_OPENMP)
     find_package(OpenMP QUIET)
     if(OpenMP_CXX_FOUND)

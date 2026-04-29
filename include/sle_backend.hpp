@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(_MSC_VER)
+#include <windows.h>
+#endif
+
 #include "autograd/tensor.h"
 #include "models/mlp/model.hpp"
 #include "models/pinn/neural_network.hpp"
@@ -45,8 +49,14 @@ inline void patch_all_masks_from_tensor(::sle::CompiledBooleanCascade& compiled,
         compiled.patch_gate_mask(gate_index, masks[gate_index], false);
     }
     if (synchronize) {
+#if defined(__GNUC__) || defined(__clang__)
         __builtin___clear_cache(reinterpret_cast<char*>(compiled.raw_code()),
                                 reinterpret_cast<char*>(compiled.raw_code() + compiled.code_size()));
+#elif defined(_MSC_VER)
+        ::FlushInstructionCache(::GetCurrentProcess(),
+                                compiled.raw_code(),
+                                static_cast<SIZE_T>(compiled.code_size()));
+#endif
 #if defined(__x86_64__) || defined(__i386__)
         asm volatile("cpuid" : : "a"(0) : "rbx", "rcx", "rdx", "memory");
 #endif

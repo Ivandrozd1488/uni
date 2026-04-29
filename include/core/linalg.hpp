@@ -48,7 +48,12 @@ struct AlignedVec {
         if (ptr == nullptr) {
             throw std::bad_alloc();
         }
-        std::fill_n(ptr, n, val);
+        // Use memset for zero (MSan tracks memset reliably); fall back to fill_n for non-zero values.
+        if (val == 0.0) {
+            std::memset(ptr, 0, n * sizeof(double));
+        } else {
+            std::fill_n(ptr, n, val);
+        }
     }
     AlignedVec(const AlignedVec& o) : n(o.n) {
         if (n == 0) { ptr = nullptr; return; }

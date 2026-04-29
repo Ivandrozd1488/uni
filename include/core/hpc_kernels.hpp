@@ -285,7 +285,9 @@ inline void gemm_hpc(
             pack_B_panel(B+k0*ldb+j0, B_packed, kb, nb, ldb);
             std::size_t nmc=(M+HPC_MC-1)/HPC_MC;
 
+            #if !defined(__SANITIZE_MEMORY__)
             #pragma omp parallel for schedule(static) if(can_par)
+            #endif
             for (int bi=0;bi<(int)nmc;++bi) {
                 std::size_t i0=bi*HPC_MC, mb=std::min((std::size_t)HPC_MC,M-i0);
                 alignas(64) double A_local[HPC_MC*HPC_KC];
@@ -348,7 +350,9 @@ inline void fused_batch_forward(
     const bool par = (batch*N_out*N_in > (std::size_t)HPC_PAR_THRESHOLD)
                      && !omp_in_parallel() && (omp_get_max_threads()>1);
     if (par) {
+        #if !defined(__SANITIZE_MEMORY__)
         #pragma omp parallel for schedule(static)
+        #endif
         for (int b=0;b<(int)batch;++b)
             fused_gemv_bias_act(W,X_batch+b*N_in,bias,Out_batch+b*N_out,N_out,N_in,act);
     } else {
@@ -420,7 +424,9 @@ inline void transpose_hpc(const double* HPC_RESTRICT src, double* HPC_RESTRICT d
     std::size_t rows, std::size_t cols) noexcept {
     constexpr std::size_t TB=32;
     const bool par=(rows*cols>10000)&&!omp_in_parallel();
+    #if !defined(__SANITIZE_MEMORY__)
     #pragma omp parallel for schedule(static) if(par)
+    #endif
     for (int i0=0;i0<(int)rows;i0+=TB) {
         for (std::size_t j0=0;j0<cols;j0+=TB) {
         std::size_t ie=std::min((std::size_t)i0+TB,rows), je=std::min(j0+TB,cols);

@@ -214,7 +214,9 @@ Matrix Matrix::operator+(const Matrix& rhs) const {
   const double* HPC_RESTRICT b = rhs.data_.ptr;
   double* HPC_RESTRICT c = res.data_.ptr;
   if (N > 100000 && !omp_in_parallel()) {
+    #if !defined(__SANITIZE_MEMORY__)
     #pragma omp parallel for schedule(static)
+#endif
     for (int i = 0; i < (int)N; ++i) c[i] = a[i] + b[i];
   } else {
     #pragma omp simd
@@ -231,7 +233,9 @@ Matrix Matrix::operator-(const Matrix& rhs) const {
   const double* HPC_RESTRICT b = rhs.data_.ptr;
   double* HPC_RESTRICT c = res.data_.ptr;
   if (N > 100000 && !omp_in_parallel()) {
+    #if !defined(__SANITIZE_MEMORY__)
     #pragma omp parallel for schedule(static)
+#endif
     for (int i = 0; i < (int)N; ++i) c[i] = a[i] - b[i];
   } else {
     #pragma omp simd
@@ -266,7 +270,9 @@ Vector Matrix::operator*(const Vector& v) const {
     for (std::size_t i = 0; i < M; ++i)
     y[i] = hpc::dot_product(A + i * K, x, K);
   } else {
+    #if !defined(__SANITIZE_MEMORY__)
     #pragma omp parallel for schedule(static)
+#endif
     for (int i = 0; i < (int)M; ++i)
     y[i] = hpc::dot_product(A + i * K, x, K);
   }

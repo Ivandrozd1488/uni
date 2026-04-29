@@ -28,7 +28,9 @@ SGD::SGD(std::vector<autograd::Tensor*> params,
 void SGD::step()
 {
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     auto* p = params_[i];
     if (!p->requires_grad()) continue;
@@ -71,7 +73,9 @@ void SGD::clip_grad_norm(double max_norm)
   if (max_norm <= 0.0) return;
   double norm_sq = 0.0;
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for reduction(+ : norm_sq) if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     const auto* p = params_[i];
     if (!p || !p->requires_grad()) continue;
@@ -144,7 +148,9 @@ void Adam::step()
   const double alpha_t = lr_ * std::sqrt(bc2) / bc1;
 
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     auto* p = params_[i];
     if (!p->requires_grad()) continue;
@@ -183,7 +189,9 @@ void Adam::clip_grad_norm(double max_norm)
   if (max_norm <= 0.0) return;
   double norm_sq = 0.0;
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for reduction(+ : norm_sq) if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     const auto* p = params_[i];
     if (!p || !p->requires_grad()) continue;
@@ -248,7 +256,9 @@ void RMSProp::step()
   const double eps = eps_;
   const double wd = weight_decay_;
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     auto* p = params_[i];
     if (!p->requires_grad()) continue;
@@ -277,7 +287,9 @@ void RMSProp::clip_grad_norm(double max_norm)
   if (max_norm <= 0.0) return;
   double norm_sq = 0.0;
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for reduction(+ : norm_sq) if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     const auto* p = params_[i];
     if (!p || !p->requires_grad()) continue;
@@ -343,7 +355,9 @@ void NAdam::step()
   const double bc2 = 1.0 - std::pow(beta2_, t_);
   const double b1_t = std::pow(beta1_, t_);
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     auto* p = params_[i];
     if (!p->requires_grad()) continue;
@@ -381,7 +395,9 @@ void NAdam::clip_grad_norm(double max_norm)
   if (max_norm <= 0.0) return;
   double norm_sq = 0.0;
 const int n_params = static_cast<int>(params_.size());
+#if !defined(__SANITIZE_MEMORY__)
 #pragma omp parallel for reduction(+ : norm_sq) if(params_.size() > 4) schedule(static)
+#endif
   for (int i = 0; i < n_params; ++i) {
     const auto* p = params_[i];
     if (!p || !p->requires_grad()) continue;

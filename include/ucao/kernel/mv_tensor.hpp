@@ -32,15 +32,19 @@ struct AlignedAlloc {
 #ifdef _MSC_VER
         return _aligned_malloc(rounded, Align);
 #else
-        return std::aligned_alloc(Align, rounded);
+        // Use operator new(align_val_t) instead of std::aligned_alloc so that
+        // MemorySanitizer (MSan) correctly tracks initialization of the block.
+        return ::operator new(rounded, std::align_val_t{Align}, std::nothrow);
 #endif
     }
 
     static void free(void* p) noexcept {
+        if (!p) return;
 #ifdef _MSC_VER
         _aligned_free(p);
 #else
-        std::free(p);
+        // Must match the operator new(align_val_t) used in alloc().
+        ::operator delete(p, std::align_val_t{Align});
 #endif
     }
 };

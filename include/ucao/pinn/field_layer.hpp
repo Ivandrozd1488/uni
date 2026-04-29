@@ -86,7 +86,7 @@ struct CliffordFieldLayer {
      * @post Returns the same field computation as forward(), but in dual algebra.
      */
     [[nodiscard]] ucao::kernel::DualMV<N, P, Q> forward_dual(const ucao::kernel::DualMV<N, P, Q>& x) const noexcept {
-        ucao::kernel::DualMV<N, P, Q> accum;
+        ucao::kernel::DualMV<N, P, Q> accum{};  // value-init ensures real[] and dual[] are zeroed
         for (int h = 0; h < HiddenDim; ++h) {
             const auto tmp = ucao::kernel::DualMV<N, P, Q>::sandwich(weights[h], x);
             for (int i = 0; i < D; ++i) {

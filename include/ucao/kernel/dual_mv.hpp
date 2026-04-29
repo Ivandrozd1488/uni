@@ -62,7 +62,7 @@ struct DualMV {
      * @post real[1<<i] = x[i], dual[1<<mu] = 1.
      */
     [[nodiscard]] static DualMV embed_coord(const float* x, int mu) noexcept {
-        DualMV out;
+        DualMV out{};
         for (int i = 0; i < N; ++i) {
             out.real[1 << i] = x[i];
         }
@@ -78,7 +78,7 @@ struct DualMV {
      * @post real = r and dual = 0.
      */
     [[nodiscard]] static DualMV from_real(const float* r) noexcept {
-        DualMV out;
+        DualMV out{};
         std::memcpy(out.real, r, sizeof(real));
         return out;
     }
@@ -89,7 +89,7 @@ struct DualMV {
      * @post rev(A_r + εA_d) = rev(A_r) + ε rev(A_d).
      */
     [[nodiscard]] DualMV reversed() const noexcept {
-        DualMV out;
+        DualMV out{};
         for (int i = 0; i < D; ++i) {
             const float s = static_cast<float>(detail::reversion_sign<N>(i));
             out.real[i] = s * real[i];
@@ -128,7 +128,7 @@ struct DualMV {
         }
         const float inv = 1.0f / std::sqrt(std::fabs(n2) + eps);
         const float denom = n2 + eps;
-        DualMV out;
+        DualMV out{};
         for (int i = 0; i < D; ++i) {
             out.real[i] = real[i] * inv;
             out.dual[i] = (dual[i] - real[i] * proj / denom) * inv;
@@ -142,7 +142,7 @@ struct DualMV {
      * @post C_r = A_r B_r and C_d = A_d B_r + A_r B_d.
      */
     [[nodiscard]] friend DualMV gp_d(const DualMV& A, const DualMV& B) noexcept {
-        DualMV out;
+        DualMV out{};
         alignas(64) float tmp1[D]{};
         alignas(64) float tmp2[D]{};
         detail::gp_dispatch<N, P, Q>(out.real, A.real, B.real);

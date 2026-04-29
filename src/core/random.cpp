@@ -6,7 +6,10 @@ namespace core {
 
 std::vector<std::size_t> sample_without_replacement(std::size_t n, std::size_t k, RNG& rng) {
   if (k > n) throw std::invalid_argument("sample_without_replacement: k > n");
-  std::vector<std::size_t> pool = iota_indices(n);
+  // Explicitly build the pool with value-initialization so MSan can track
+  // the contents even when the MT19937 seed path was not instrumented.
+  std::vector<std::size_t> pool(n, std::size_t{0});
+  std::iota(pool.begin(), pool.end(), std::size_t{0});
   for (std::size_t i = 0; i < k; ++i) {
     std::size_t j = i + static_cast<std::size_t>(rng.uniform_int(0, static_cast<int>(n - i - 1)));
     std::swap(pool[i], pool[j]);

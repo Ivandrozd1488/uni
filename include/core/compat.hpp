@@ -22,27 +22,33 @@
   #define HPC_RESTRICT __restrict__
 #endif
 
-//   Aligned allocation                            
+//   Aligned allocation
 // MSVC lacks std::aligned_alloc (C11). Use _aligned_malloc/_aligned_free.
-// GCC/Clang have std::aligned_alloc.
+// GCC/Clang: use ::operator new(size, align_val_t) instead of std::aligned_alloc so that
+// MemorySanitizer (MSan) correctly tracks initialization of the returned block.
 inline void* hpc_aligned_alloc(std::size_t alignment, std::size_t size) {
     if (size == 0) return nullptr;
 #ifdef _MSC_VER
     void* p = _aligned_malloc(size, alignment);
-#else
-    // aligned_alloc requires size to be a multiple of alignment
-    std::size_t aligned_size = ((size + alignment - 1) / alignment) * alignment;
-    void* p = std::aligned_alloc(alignment, aligned_size);
-#endif
     if (!p) throw std::bad_alloc();
     return p;
+#else
+    // Round size up to a multiple of alignment (required by aligned allocators).
+    const std::size_t aligned_size = ((size + alignment - 1) / alignment) * alignment;
+    // operator new(size, align_val_t) is tracked by MSan; std::aligned_alloc is not.
+    return ::operator new(aligned_size, std::align_val_t{alignment});
+#endif
 }
 
-inline void hpc_aligned_free(void* p) {
+// alignment must match the value passed to hpc_aligned_alloc for the same pointer.
+inline void hpc_aligned_free(void* p, std::size_t alignment = 64) {
+    if (!p) return;
 #ifdef _MSC_VER
+    (void)alignment;
     _aligned_free(p);
 #else
-    std::free(p);
+    // Must use operator delete with the same align_val_t used at allocation time.
+    ::operator delete(p, std::align_val_t{alignment});
 #endif
 }
 
