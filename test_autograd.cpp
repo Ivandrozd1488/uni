@@ -364,8 +364,16 @@ static void test_backward_release_graph_stress()
   const std::size_t rss_after = read_rss_kb();
   const std::size_t rss_growth = (rss_after >= rss_before) ? (rss_after - rss_before) : 0;
   // Heuristic guard: transient allocator noise is allowed, monotonic growth is not.
-  check(rss_growth < 12 * 1024,
-        "RSS growth < 12MB over " + std::to_string(iters) + " backward passes");
+  // Under ASan/MSan each allocation carries shadow + redzone overhead and the
+  // allocator does not return RSS to the OS — raise the limit accordingly.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_MEMORY__)
+  constexpr std::size_t rss_limit_kb = 64 * 1024; // 64 MB under sanitizers
+#else
+  constexpr std::size_t rss_limit_kb = 12 * 1024; // 12 MB in normal builds
+#endif
+  check(rss_growth < rss_limit_kb,
+        "RSS growth < " + std::to_string(rss_limit_kb / 1024) +
+        "MB over " + std::to_string(iters) + " backward passes");
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
